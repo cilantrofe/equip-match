@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+sqlalchemy[asyncio]
+asyncpg
+aiohttp
+beautifulsoup4
+pydantic
+pint
+rapidfuzz
+python-dotenv
