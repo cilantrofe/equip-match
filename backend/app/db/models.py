@@ -4,12 +4,14 @@ from sqlalchemy.sql import func
 
 Base = declarative_base()
 
+
 class Source(Base):
     __tablename__ = "sources"
     id = Column(Integer, primary_key=True)
     name = Column(Text, nullable=False)
     base_url = Column(Text)
     last_scraped = Column(TIMESTAMP)
+
 
 class Product(Base):
     __tablename__ = "products"
@@ -27,6 +29,7 @@ class Product(Base):
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
 
     specs = relationship("ProductSpec", back_populates="product")
+
 
 class ProductSpec(Base):
     __tablename__ = "product_specs"

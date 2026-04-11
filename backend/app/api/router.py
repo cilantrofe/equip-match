@@ -5,6 +5,7 @@ from app.services.lookup import lookup_product
 
 router = APIRouter()
 
+
 class MatchItem(BaseModel):
     id: int
     sku: Optional[str]
@@ -12,11 +13,15 @@ class MatchItem(BaseModel):
     model: Optional[str]
     price: Optional[float]
     score: Optional[float]
+    category: Optional[str]
+    url: Optional[str]
+
 
 class LookupResponse(BaseModel):
     query: Dict[str, Any]
     price_candidate: Optional[MatchItem]
     tech_candidate: Optional[MatchItem]
+
 
 @router.get("/lookup", response_model=LookupResponse)
 async def lookup(sku: str):
