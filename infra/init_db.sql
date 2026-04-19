@@ -28,12 +28,3 @@ CREATE TABLE IF NOT EXISTS product_specs (
   spec_value_num NUMERIC,
   spec_unit TEXT
 );
-
-CREATE TABLE IF NOT EXISTS manual_labels (
-  id SERIAL PRIMARY KEY,
-  query_sku TEXT,
-  candidate_product_id INT REFERENCES products(id),
-  label BOOLEAN,
-  comment TEXT,
-  created_at TIMESTAMP DEFAULT now()
-);

@@ -17,16 +17,17 @@ class Product(Base):
     __tablename__ = "products"
     id = Column(Integer, primary_key=True)
     source_id = Column(Integer, ForeignKey("sources.id"))
-    source_sku = Column(Text)
+    source_sku = Column(Text, index=True)
     brand = Column(Text)
     model = Column(Text)
-    category = Column(Text)
+    category = Column(Text, index=True)
     price = Column(Numeric)
     currency = Column(Text)
     url = Column(Text)
-    raw_html = Column(Text)
     created_at = Column(TIMESTAMP, server_default=func.now())
-    updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+    updated_at = Column(
+        TIMESTAMP, server_default=func.now(), onupdate=func.now()
+    )
 
     specs = relationship("ProductSpec", back_populates="product")
 
@@ -34,10 +35,12 @@ class Product(Base):
 class ProductSpec(Base):
     __tablename__ = "product_specs"
     id = Column(Integer, primary_key=True)
-    product_id = Column(Integer, ForeignKey("products.id"))
+    product_id = Column(Integer, ForeignKey("products.id"), index=True)
     spec_name = Column(Text)
+    spec_name_canonical = Column(Text, index=True)
     spec_value_text = Column(Text)
     spec_value_num = Column(Numeric)
     spec_unit = Column(Text)
+    weight = Column(Numeric, nullable=False, server_default="1.0")
 
     product = relationship("Product", back_populates="specs")

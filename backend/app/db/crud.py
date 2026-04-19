@@ -1,7 +1,10 @@
+from typing import Optional
+
 from sqlalchemy import select
-from app.db.models import Product, ProductSpec, Source
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+
+from app.db.models import Product, ProductSpec, Source
 
 
 async def get_product_by_sku(session: AsyncSession, sku: str):
@@ -14,12 +17,23 @@ async def get_product_by_sku(session: AsyncSession, sku: str):
     return res.scalars().first()
 
 
-async def get_products_in_category(session: AsyncSession, category: str):
+async def get_products_in_category(
+    session: AsyncSession,
+    category: str,
+    exclude_product_id: Optional[int] = None,
+):
+    """Вернуть все товары категории с подгруженными характеристиками.
+
+    `exclude_product_id` отсекает сам target прямо в SQL — иначе он
+    оказался бы в кандидатах со скором 1.0 и портил выдачу.
+    """
     q = (
         select(Product)
         .options(selectinload(Product.specs))
         .where(Product.category == category)
     )
+    if exclude_product_id is not None:
+        q = q.where(Product.id != exclude_product_id)
     res = await session.execute(q)
     return res.scalars().all()
 
@@ -52,13 +66,17 @@ async def add_spec(
     value_text: str = None,
     value_num=None,
     unit: str = None,
+    spec_name_canonical: str = None,
+    weight: float = 1.0,
 ):
     s = ProductSpec(
         product_id=product_id,
         spec_name=spec_name,
+        spec_name_canonical=spec_name_canonical or spec_name,
         spec_value_text=value_text,
         spec_value_num=value_num,
         spec_unit=unit,
+        weight=weight,
     )
     session.add(s)
     await session.commit()

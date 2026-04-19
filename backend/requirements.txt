@@ -2,6 +2,7 @@ fastapi
 uvicorn[standard]
 sqlalchemy[asyncio]
 asyncpg
+alembic
 aiohttp
 beautifulsoup4
 pydantic

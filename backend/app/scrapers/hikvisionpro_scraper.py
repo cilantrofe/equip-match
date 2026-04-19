@@ -1,327 +1,221 @@
 import asyncio
-import random
 import re
+from typing import Optional
 from urllib.parse import urljoin, urlparse
 
 import aiohttp
 from bs4 import BeautifulSoup
 
-from app.db.session import async_session
-from app.db.crud import create_source_if_missing, upsert_product, add_spec
-from app.normalization.normalizer import parse_number_and_unit, normalize_spec_name
+from app.scrapers.base import BaseHttpScraper
 
 BASE = "https://hikvisionpro.ru"
-CATALOG_PATH = "/catalog/videodomofony-hikvision/"
-CATALOG_URL = urljoin(BASE, CATALOG_PATH)
 
-HEADERS = {
+CATALOG_CATEGORIES: dict[str, str] = {
+    "/catalog/videodomofony-hikvision/ip-videodomofony-hikvision/": "Видеомонитор",
+    "/catalog/videodomofony-hikvision/ip-vyzyvnye-paneli-hikvision/": "Вызывная панель",
+    "/catalog/produktsiya-hiwatch/videodomofony-hiwatch/": "Вызывная панель",
+}
+
+DEFAULT_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Referer": BASE,
 }
 
-REQUEST_DELAY = 0.4
-CONCURRENCY = 6
-RETRIES = 2
+
+# ---------------------------------------------------------------------------
+# HTML helpers
+# ---------------------------------------------------------------------------
+
+def _clean(text: Optional[str]) -> str:
+    if not text:
+        return ""
+    return text.replace("\u00a0", " ").strip()
 
 
-async def fetch_text(session: aiohttp.ClientSession, url: str, tries=RETRIES):
-    for attempt in range(1, tries + 1):
-        try:
-            async with session.get(url, timeout=40, allow_redirects=True) as resp:
-                text = await resp.text(errors="ignore")
-                return resp.status, text
-        except Exception as e:
-            if attempt == tries:
-                return None, None
-            await asyncio.sleep(0.2 * attempt + random.random() * 0.1)
-    return None, None
-
-
-def is_product_anchor(a_tag, catalog_path=CATALOG_PATH):
+def _is_product_anchor(a_tag) -> bool:
     href = a_tag.get("href") or ""
-    if not href:
+    if not href or href.startswith(("javascript:", "mailto:")):
         return False
+    # hikvisionpro.ru product pages are always under /catalog/element/
+    return "/catalog/element/" in href.lower()
 
-    if href.startswith("javascript:") or href.startswith("mailto:"):
-        return False
 
-    ancestor = a_tag
-    for _ in range(4):
-        ancestor = ancestor.parent
-        if ancestor is None:
-            break
-        cl = " ".join(ancestor.get("class") or [])
-        if cl:
-            low = cl.lower()
-            if any(
-                k in low
-                for k in ("product", "card", "item", "catalog", "goods", "tile", "prod")
-            ):
-                return True
+def _extract_specs(soup: BeautifulSoup) -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
 
-    if any(
-        k in href.lower() for k in ("/product", "/item", "/card", "/goods", "/catalog/")
+    for table in soup.find_all("table"):
+        for tr in table.find_all("tr"):
+            cells = tr.find_all(["td", "th"])
+            if len(cells) >= 2:
+                k = _clean(cells[0].get_text(" ", strip=True))
+                v = _clean(cells[1].get_text(" ", strip=True))
+                if k and v:
+                    pairs.append((k, v))
+
+    for sc in soup.select(
+        "[class*='spec'], [class*='характер'], .product-specs, .specifications, .params, .props"
     ):
-        return True
+        for item in sc.find_all(["li", "div"]):
+            txt = _clean(item.get_text(" ", strip=True))
+            if ":" in txt:
+                k, v = [x.strip() for x in txt.split(":", 1)]
+                if k and v:
+                    pairs.append((k, v))
 
-    return False
-
-
-def normalize_link(href: str) -> str:
-    abs_url = urljoin(BASE, href).split("#")[0].rstrip("/")
-    return abs_url
-
-
-def extract_price_from_text(txt: str):
-    if not txt:
-        return None
-    m = re.search(
-        r"([\d\s\u00A0]+(?:[.,]\d+)?)\s*(₽|rub|RUB)?", txt.replace("\xa0", " ")
-    )
-    if m:
-        num = m.group(1).replace(" ", "").replace("\u00a0", "").replace(",", ".")
-        try:
-            return float(num)
-        except Exception:
-            return None
-    return None
-
-
-async def parse_product_page_and_save(html: str, url: str, source_id: int):
-    soup = BeautifulSoup(html, "html.parser")
-
-    h1 = soup.find("h1")
-    title = h1.get_text(" ", strip=True) if h1 else None
-
-    sku = None
-    sku_sel = soup.select_one(".sku, .product-code, .artikul, .catalog-article, .code")
-    if sku_sel:
-        sku = sku_sel.get_text(" ", strip=True)
-    else:
-        txt = soup.find(string=re.compile(r"Артикул|SKU|EAN|Код", re.I))
-        if txt:
-            m = re.search(r"[:\s]\s*([A-Za-z0-9\-_\/\.]+)", txt)
-            if m:
-                sku = m.group(1).strip()
-    price = None
-    price_sel = soup.select_one(
-        ".price, .product-price, .price-current, .value_price, .price__value"
-    )
-    if price_sel:
-        price = extract_price_from_text(price_sel.get_text(" ", strip=True))
-    if price is None:
-        txt = soup.find(string=re.compile(r"[\d\s\u00A0]+\s*₽"))
-        if txt:
-            price = extract_price_from_text(txt)
-
-    category = None
-    bc = soup.select_one(".breadcrumb, nav.breadcrumbs, .breadcrumbs")
-    if bc:
-        try:
-            nodes = [
-                n.get_text(" ", strip=True)
-                for n in bc.find_all(["a", "li", "span"])
-                if n.get_text(strip=True)
-            ]
-            if nodes:
-                category = nodes[-1]
-        except Exception:
-            category = None
-
-    desc = None
-    desc_sel = soup.select_one(
-        ".product-description, .description, .desc, .short-description, .text"
-    )
-    if desc_sel:
-        desc = desc_sel.get_text(" ", strip=True)
-
-    image = None
-    img = soup.select_one(".product-image img, img.product-image, .gallery img")
-    if img and img.get("src"):
-        image = urljoin(BASE, img.get("src"))
-
-    product_data = {
-        "source_id": source_id,
-        "source_sku": sku or title or url,
-        "brand": None,
-        "model": title or None,
-        "category": category,
-        "price": price,
-        "currency": "RUB" if price else None,
-        "url": url,
-        "raw_html": html[:1000000],
-    }
-
-    async with async_session() as db_sess:
-        try:
-            p = await upsert_product(db_sess, product_data)
-        except Exception as e:
-            return
-
-        parsed_any = False
-
-        for table in soup.find_all("table"):
-            for tr in table.find_all("tr"):
-                cells = tr.find_all(["td", "th"])
-                if len(cells) >= 2:
-                    key = cells[0].get_text(" ", strip=True)
-                    val = cells[1].get_text(" ", strip=True)
-                    if key:
-                        sname = normalize_spec_name(key)
-                        num, unit = parse_number_and_unit(val)
-                        try:
-                            if num is not None:
-                                await add_spec(db_sess, p.id, sname, None, num, unit)
-                            else:
-                                await add_spec(
-                                    db_sess, p.id, sname, val or None, None, None
-                                )
-                            parsed_any = True
-                        except Exception as e:
-                            print("add_spec table error:", p.id, key, e)
-
-        spec_blocks = soup.select(
-            "[class*='spec'], [class*='характер'], .product-specs, .specifications, .params, .props"
-        )
-        for sc in spec_blocks:
-            items = sc.find_all(["li", "div"])
-            for it in items:
-                txt = it.get_text(" ", strip=True)
-                if ":" in txt:
-                    k, v = [x.strip() for x in txt.split(":", 1)]
-                    if k:
-                        sname = normalize_spec_name(k)
-                        num, unit = parse_number_and_unit(v)
-                        try:
-                            if num is not None:
-                                await add_spec(db_sess, p.id, sname, None, num, unit)
-                            else:
-                                await add_spec(
-                                    db_sess, p.id, sname, v or None, None, None
-                                )
-                            parsed_any = True
-                        except Exception as e:
-                            print("add_spec block error:", p.id, k, e)
-
-        if not parsed_any:
-            for dl in soup.find_all("dl"):
-                dts = dl.find_all("dt")
-                for dt in dts:
-                    dd = dt.find_next_sibling("dd")
-                    if not dd:
-                        continue
-                    k = dt.get_text(" ", strip=True)
-                    v = dd.get_text(" ", strip=True)
-                    if k:
-                        sname = normalize_spec_name(k)
-                        num, unit = parse_number_and_unit(v)
-                        try:
-                            if num is not None:
-                                await add_spec(db_sess, p.id, sname, None, num, unit)
-                            else:
-                                await add_spec(
-                                    db_sess, p.id, sname, v or None, None, None
-                                )
-                            parsed_any = True
-                        except Exception as e:
-                            print("add_spec dl error:", p.id, k, e)
-
-        if not parsed_any and desc:
-            lines = [ln.strip() for ln in desc.splitlines() if ln.strip()]
-            for ln in lines:
-                if ":" in ln:
-                    k, v = [x.strip() for x in ln.split(":", 1)]
-                    if k:
-                        sname = normalize_spec_name(k)
-                        num, unit = parse_number_and_unit(v)
-                        try:
-                            if num is not None:
-                                await add_spec(db_sess, p.id, sname, None, num, unit)
-                            else:
-                                await add_spec(
-                                    db_sess, p.id, sname, v or None, None, None
-                                )
-                        except Exception as e:
-                            print("add_spec desc line error:", p.id, k, e)
-
-        if image:
-            try:
-                await add_spec(
-                    db_sess, p.id, normalize_spec_name("image"), image, None, None
-                )
-            except Exception:
-                pass
-        if desc:
-            try:
-                await add_spec(
-                    db_sess, p.id, normalize_spec_name("description"), desc, None, None
-                )
-            except Exception:
-                pass
-
-    return
-
-
-async def crawl_catalog_page_only():
-    conn = aiohttp.TCPConnector(limit_per_host=6)
-    async with aiohttp.ClientSession(headers=HEADERS, connector=conn) as session:
-        st, html = await fetch_text(session, CATALOG_URL)
-        if st != 200 or not html:
-            return
-
-        soup = BeautifulSoup(html, "html.parser")
-
-        found = []
-        for a in soup.find_all("a", href=True):
-            if is_product_anchor(a):
-                href = a.get("href")
-                normalized = normalize_link(href)
-
-                if urlparse(normalized).netloc != urlparse(BASE).netloc:
+    if not pairs:
+        for dl in soup.find_all("dl"):
+            for dt in dl.find_all("dt"):
+                dd = dt.find_next_sibling("dd")
+                if not dd:
                     continue
-                found.append(normalized)
+                k = _clean(dt.get_text(" ", strip=True))
+                v = _clean(dd.get_text(" ", strip=True))
+                if k and v:
+                    pairs.append((k, v))
 
-        seen = set()
-        links = []
-        for u in found:
-            if u not in seen:
-                seen.add(u)
-                links.append(u)
+    return pairs
 
-        for i, u in enumerate(links[:40], 1):
-            print(f"{i:02d}. {u}")
 
-        if not links:
-            return
+# ---------------------------------------------------------------------------
+# Scraper
+# ---------------------------------------------------------------------------
 
-        async with async_session() as db_sess:
-            src = await create_source_if_missing(
-                db_sess, "HikvisionPro (catalog page)", BASE + CATALOG_PATH
-            )
-            source_id = src.id
+class HikvisionProScraper(BaseHttpScraper):
+    source_name = "HikvisionPro"
+    source_url = BASE
+    request_delay = 0.4
+    concurrency = 6
+    retries = 2
+    default_headers = DEFAULT_HEADERS
 
-        sem = asyncio.Semaphore(CONCURRENCY)
-        counters = {"processed": 0, "saved": 0, "skipped": 0, "errors": 0}
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._url_category: dict[str, str] = {}
 
-        async def worker(link):
-            async with sem:
-                counters["processed"] += 1
-                s, h = await fetch_text(session, link)
-                if s != 200 or not h:
-                    counters["skipped"] += 1
-                    return
+    async def _collect_from_catalog(
+        self, session: aiohttp.ClientSession, catalog_path: str, category: str, seen: set[str]
+    ) -> None:
+        catalog_url = urljoin(BASE, catalog_path)
+        page = 1
+        while True:
+            url = catalog_url if page == 1 else f"{catalog_url}?PAGEN_1={page}"
+            self._log.info("Fetching [%s] page %d: %s", category, page, url)
+            status, html = await self.fetch(session, url)
+            if status != 200 or not html:
+                self._log.error("Failed to fetch %s page %d (HTTP %s)", category, page, status)
+                break
+
+            soup = await asyncio.to_thread(BeautifulSoup, html, "html.parser")
+            before = len(seen)
+            for a in soup.find_all("a", href=True):
+                if not _is_product_anchor(a):
+                    continue
+                full = urljoin(BASE, a["href"]).split("#")[0].rstrip("/")
+                if urlparse(full).netloc != urlparse(BASE).netloc:
+                    continue
+                if full not in seen:
+                    seen.add(full)
+                    self._url_category[full] = category
+
+            if len(seen) == before:
+                break
+            page += 1
+
+    async def collect_links(self, session: aiohttp.ClientSession) -> set[str]:
+        seen: set[str] = set()
+        for path, category in CATALOG_CATEGORIES.items():
+            await self._collect_from_catalog(session, path, category, seen)
+        self._log.info("Found %d product links total across all catalogs", len(seen))
+        return seen
+
+    def parse_page(
+        self, soup: BeautifulSoup, _html: str, url: str
+    ) -> Optional[tuple[dict, list[tuple[str, str]]]]:
+        h1 = soup.find("h1")
+        title = _clean(h1.get_text(" ", strip=True)) if h1 else None
+
+        sku = None
+        # Search only inside the main product block to avoid quick-view popups for other products
+        main = (
+            soup.select_one(".catalog-element-offer, .product-detail, .detail-block, #catalog_element, .catalog-element")
+            or soup.find("article")
+            or soup
+        )
+        sku_sel = main.select_one(".sku, .product-code, .artikul, .catalog-article, .catalog-element-article")
+        if sku_sel:
+            raw = _clean(sku_sel.get_text(" ", strip=True))
+            # strip label prefix like "Артикул: DS-KAD20"
+            raw = re.sub(r"^(Артикул|Арт|SKU|Код)[.:\s]+", "", raw, flags=re.I).strip()
+            if raw and len(raw) < 80:
+                sku = raw
+        if not sku:
+            # look for "Артикул: XXXXX" in page text
+            txt = soup.find(string=re.compile(r"Артикул|SKU|EAN", re.I))
+            if txt:
+                m = re.search(r"[:\s]\s*([A-Za-z0-9][\w\-\/\.]{2,})", txt)
+                if m:
+                    sku = m.group(1).strip()
+        if not sku:
+            # derive from URL slug as last resort: /catalog/element/ds-kad20.html -> DS-KAD20
+            slug = url.rstrip("/").split("/")[-1]
+            slug = re.sub(r"\.html?$", "", slug, flags=re.I).upper()
+            if slug:
+                sku = slug
+
+        price = None
+        price_sel = soup.select_one(".price, .product-price, .price-current, .value_price, .price__value")
+        if price_sel:
+            txt = price_sel.get_text(" ", strip=True).replace("\xa0", " ")
+            m = re.search(r"([\d\s]+(?:[.,]\d+)?)\s*₽?", txt)
+            if m:
                 try:
-                    await parse_product_page_and_save(h, link, source_id)
-                    counters["saved"] += 1
-                except Exception as e:
-                    counters["errors"] += 1
-                await asyncio.sleep(REQUEST_DELAY + random.random() * 0.15)
+                    price = float(m.group(1).replace(" ", "").replace(",", "."))
+                except Exception:
+                    pass
 
-        tasks = [asyncio.create_task(worker(u)) for u in links]
-        await asyncio.gather(*tasks)
+        category = self._url_category.get(url)
+
+        brand = None
+        if title:
+            tl = title.lower()
+            if tl.startswith("hiwatch") or "hiwatch" in tl:
+                brand = "HiWatch"
+            else:
+                brand = "Hikvision"
+
+        product_data = {
+            "source_sku": sku or title or url,
+            "brand": brand,
+            "model": title,
+            "category": category,
+            "price": price,
+            "currency": "RUB" if price else None,
+            "url": url,
+        }
+
+        pairs = _extract_specs(soup)
+
+        # Fallback: description lines as key: value
+        if not pairs:
+            desc_sel = soup.select_one(".product-description, .description, .desc, .short-description, .text")
+            if desc_sel:
+                for ln in desc_sel.get_text(" ", strip=True).splitlines():
+                    ln = _clean(ln)
+                    if ":" in ln:
+                        k, v = [x.strip() for x in ln.split(":", 1)]
+                        if k and v:
+                            pairs.append((k, v))
+
+        return product_data, pairs
 
 
 if __name__ == "__main__":
-    asyncio.run(crawl_catalog_page_only())
+    import logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(name)s] %(levelname)s %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    asyncio.run(HikvisionProScraper().run())
