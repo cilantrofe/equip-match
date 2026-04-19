@@ -1,52 +1,49 @@
 # EquipMatch
 
-Сервис для поиска аналогов оборудования в сфере smart building.
-
-2 вида поиска аналога:
-- По цене
-- По техническим характеристикам
+Веб-серрвис для поиска аналогов оборудования в сфере smart building.
 
 Структура проекта:
+
+```bash
 .
 ├── README.md
 ├── backend
 │   ├── Dockerfile
+│   ├── alembic  --- Миграции
+│   │   ├── env.py
+│   │   ├── script.py.mako
+│   │   └── versions
+│   │       ├── 0001_add_weight_canonical_and_indexes.py
+│   ├── alembic.ini
 │   ├── app
 │   │   ├── api
 │   │   │   └── router.py
 │   │   ├── config.py
-│   │   ├── db
+│   │   ├── db --- организация БД
 │   │   │   ├── crud.py
 │   │   │   ├── models.py
 │   │   │   └── session.py
 │   │   ├── main.py
-│   │   ├── matching
+│   │   ├── matching --- алгоритмы матчинга
 │   │   │   └── matcher.py
-│   │   ├── normalization
-│   │   │   └── normalizer.py
-│   │   ├── scrapers
+│   │   ├── normalization --- ETL
+│   │   │   ├── normalizer.py
+│   │   │   └── spec_aliases.py
+│   │   ├── scrapers --- Парсеры
 │   │   │   ├── akuvox_rus_scraper.py
+│   │   │   ├── base.py
 │   │   │   ├── basip_scraper.py
 │   │   │   ├── camerussia_smart_house_scraper.py
 │   │   │   ├── comelit_clients_api_scraper.py
 │   │   │   ├── hikvisionpro_scraper.py
 │   │   │   ├── run_scrapers.py
 │   │   │   └── test_parse.py
-│   │   └── services
+│   │   └── services -- API методы
 │   │       └── lookup.py
 │   ├── requirements.txt
-│   └── static
-│       └── index.html
-├── backup with akuvox.sql
-├── backup.sql
-├── data-1774198026404.csv
-├── data-1774201532566.csv
 ├── docker-compose.yml
-├── image.png
-├── index.html
 ├── infra
 │   └── init_db.sql
-├── products_specs.csv
-├── products_specs.sql
-├── products_specs.txt
-└── query_history.sql
+```
+
+В работе: автобновление БД раз в период(cron задачи), веб-верстка
