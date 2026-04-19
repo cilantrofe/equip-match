@@ -36,8 +36,6 @@
 │   │   │   ├── camerussia_smart_house_scraper.py
 │   │   │   ├── comelit_clients_api_scraper.py
 │   │   │   ├── hikvisionpro_scraper.py
-│   │   │   ├── run_scrapers.py
-│   │   │   └── test_parse.py
 │   │   └── services -- API методы
 │   │       └── lookup.py
 │   ├── requirements.txt
