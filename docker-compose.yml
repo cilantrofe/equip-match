@@ -1,11 +1,13 @@
 version: '3.8'
+
 services:
   db:
     image: postgres:15
+    env_file: .env
     environment:
-      POSTGRES_USER: pm
-      POSTGRES_PASSWORD: pm_pass
-      POSTGRES_DB: product_matcher
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - db_data:/var/lib/postgresql/data
     ports:
@@ -13,11 +15,11 @@ services:
 
   backend:
     build: ./backend
+    env_file: .env
     volumes:
       - ./backend:/app
     environment:
-      DATABASE_URL: postgresql+asyncpg://pm:pm_pass@db:5432/product_matcher
-
+      DATABASE_URL: ${DATABASE_URL}
     ports:
       - "8000:8000"
     depends_on:

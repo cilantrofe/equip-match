@@ -24,8 +24,8 @@ router = APIRouter()
 MAX_WEIGHT_OVERRIDES = 6
 MAX_WEIGHT_VALUE = 10.0
 
-KNOWN_CANONICALS: frozenset[str] = (
-    frozenset(SPEC_ALIASES.values()) | frozenset(WEIGHT_DEFAULTS.keys())
+KNOWN_CANONICALS: frozenset[str] = frozenset(SPEC_ALIASES.values()) | frozenset(
+    WEIGHT_DEFAULTS.keys()
 )
 
 
@@ -70,20 +70,13 @@ class TechLookupRequest(BaseModel):
     @classmethod
     def _validate_weights(cls, value: dict[str, float]) -> dict[str, float]:
         if len(value) > MAX_WEIGHT_OVERRIDES:
-            raise ValueError(
-                f"не более {MAX_WEIGHT_OVERRIDES} оверрайдов весов за раз"
-            )
+            raise ValueError(f"не более {MAX_WEIGHT_OVERRIDES} оверрайдов весов за раз")
         unknown = [k for k in value if k not in KNOWN_CANONICALS]
         if unknown:
             raise ValueError(
-                "неизвестные канонические имена: "
-                + ", ".join(sorted(unknown))
+                "неизвестные канонические имена: " + ", ".join(sorted(unknown))
             )
-        bad = [
-            k
-            for k, w in value.items()
-            if not (0.0 < float(w) <= MAX_WEIGHT_VALUE)
-        ]
+        bad = [k for k, w in value.items() if not (0.0 < float(w) <= MAX_WEIGHT_VALUE)]
         if bad:
             raise ValueError(
                 f"веса должны быть в диапазоне (0, {MAX_WEIGHT_VALUE}]: "

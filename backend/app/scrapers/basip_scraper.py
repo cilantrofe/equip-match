@@ -1,3 +1,12 @@
+"""Скрапер сайта bas-ip.ru.
+
+Обходит разделы `intercoms` (видеомониторы) и `panels` (вызывные панели)
+каталога, извлекает характеристики из фирменного блока `.specifications`
+или из текстовых блоков с разбивкой по парам строк.
+"""
+
+from __future__ import annotations
+
 import asyncio
 import re
 from typing import Optional
@@ -6,7 +15,7 @@ from urllib.parse import urljoin, urlparse
 import aiohttp
 from bs4 import BeautifulSoup
 
-from app.scrapers.base import BaseHttpScraper
+from app.scrapers.base import CHROME_UA, BaseHttpScraper, _clean
 
 BASE = "https://bas-ip.ru"
 
@@ -23,16 +32,8 @@ _CATEGORY_MAP: dict[str, str] = {
 
 _ALLOWED_CATALOG_SLUGS: frozenset[str] = frozenset({"intercoms", "panels"})
 
-
-def _category_from_url(url: str) -> Optional[str]:
-    parts = [p for p in urlparse(url).path.split("/") if p]
-    if len(parts) >= 2 and parts[0] == "catalog":
-        return _CATEGORY_MAP.get(parts[1], parts[1].replace("-", " ").title())
-    return None
-
 DEFAULT_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
+    "User-Agent": CHROME_UA,
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
     "Referer": urljoin(BASE, "/catalog"),
@@ -40,16 +41,25 @@ DEFAULT_HEADERS = {
 
 
 # ---------------------------------------------------------------------------
+# URL helpers
+# ---------------------------------------------------------------------------
+
+
+def _category_from_url(url: str) -> Optional[str]:
+    """Определить категорию товара по пути URL каталога."""
+    parts = [p for p in urlparse(url).path.split("/") if p]
+    if len(parts) >= 2 and parts[0] == "catalog":
+        return _CATEGORY_MAP.get(parts[1], parts[1].replace("-", " ").title())
+    return None
+
+
+# ---------------------------------------------------------------------------
 # HTML helpers
 # ---------------------------------------------------------------------------
 
-def _clean(text: Optional[str]) -> str:
-    if not text:
-        return ""
-    return text.replace("\u00a0", " ").strip()
-
 
 def _extract_specs_from_container(soup: BeautifulSoup) -> list[tuple[str, str]]:
+    """Извлечь характеристики из блока `.specifications` (фирменная разметка BAS-IP)."""
     pairs: list[tuple[str, str]] = []
     container = soup.select_one(".specifications")
     if not container:
@@ -63,6 +73,11 @@ def _extract_specs_from_container(soup: BeautifulSoup) -> list[tuple[str, str]]:
 
 
 def _extract_specs_from_text_blocks(soup: BeautifulSoup) -> list[tuple[str, str]]:
+    """Извлечь характеристики из текстового раздела «Технические характеристики».
+
+    Строки читаются попарно: чётные — название, нечётные — значение.
+    Если раздел не найден, пробуем стандартные CSS-блоки описания.
+    """
     lines: list[str] = []
 
     heading_node = None
@@ -79,14 +94,22 @@ def _extract_specs_from_text_blocks(soup: BeautifulSoup) -> list[tuple[str, str]
             if sib.name and sib.name.lower() in ("h2", "h3", "h4"):
                 break
             text = sib.get_text(separator="\n", strip=True)
-            if not text or any(k in text.lower() for k in ("файлы", "загрузки", "скачать")):
+            if not text or any(
+                k in text.lower() for k in ("файлы", "загрузки", "скачать")
+            ):
                 break
             lines.extend(ln.strip() for ln in text.splitlines() if ln.strip())
 
     if not lines:
-        block = soup.select_one(".product-description, .product-body, .product-info, .content")
+        block = soup.select_one(
+            ".product-description, .product-body, .product-info, .content"
+        )
         if block:
-            lines = [ln.strip() for ln in block.get_text(separator="\n", strip=True).splitlines() if ln.strip()]
+            lines = [
+                ln.strip()
+                for ln in block.get_text(separator="\n", strip=True).splitlines()
+                if ln.strip()
+            ]
 
     pairs: list[tuple[str, str]] = []
     i = 0
@@ -102,14 +125,19 @@ def _extract_specs_from_text_blocks(soup: BeautifulSoup) -> list[tuple[str, str]
 # Scraper
 # ---------------------------------------------------------------------------
 
+
 class BasIPScraper(BaseHttpScraper):
+    """Скрапер bas-ip.ru: видеомониторы и вызывные панели."""
+
     source_name = "BAS-IP"
     source_url = BASE
+    source_brand = "BAS-IP"
     request_delay = 1.0
     concurrency = 2
     default_headers = DEFAULT_HEADERS
 
     async def collect_links(self, session: aiohttp.ClientSession) -> set[str]:
+        """Обойти каталог и вернуть URL всех страниц товаров."""
         self._log.info("Fetching catalog root: %s/catalog", BASE)
         status, html = await self.fetch(session, urljoin(BASE, "/catalog"))
         if status != 200 or not html:
@@ -130,8 +158,11 @@ class BasIPScraper(BaseHttpScraper):
                 continue
             (product_links if len(parts) >= 3 else category_links).add(full)
 
-        self._log.info("Root page: %d product links, %d category links to crawl",
-                       len(product_links), len(category_links))
+        self._log.info(
+            "Root page: %d product links, %d category links to crawl",
+            len(product_links),
+            len(category_links),
+        )
 
         visited: set[str] = set()
         to_visit = list(category_links)
@@ -162,16 +193,23 @@ class BasIPScraper(BaseHttpScraper):
         return product_links
 
     def parse_page(
-        self, soup: BeautifulSoup, _html: str, url: str
+        self,
+        soup: BeautifulSoup,
+        _html: str,
+        url: str,
     ) -> Optional[tuple[dict, list[tuple[str, str]]]]:
+        """Разобрать страницу товара BAS-IP и вернуть данные + характеристики."""
         has_specs = bool(soup.select_one(".specifications"))
         has_price = bool(
-            soup.select_one(".price") or soup.select_one(".uk-text-bolder")
+            soup.select_one(".price")
+            or soup.select_one(".uk-text-bolder")
             or soup.select_one(".product__price")
         )
-        has_ean = bool(soup.find(
-            string=lambda s: s and any(k in s for k in ("EAN", "Артикул", "арт."))
-        ))
+        has_ean = bool(
+            soup.find(
+                string=lambda s: s and any(k in s for k in ("EAN", "Артикул", "арт."))
+            )
+        )
         if not (has_specs or has_price or has_ean):
             return None
 
@@ -179,17 +217,29 @@ class BasIPScraper(BaseHttpScraper):
         title = _clean(title_tag.get_text(strip=True)) if title_tag else None
 
         price = None
-        for sel in (".price", ".product-price", ".price-block", ".product__price", ".prod-price"):
+        for sel in (
+            ".price",
+            ".product-price",
+            ".price-block",
+            ".product__price",
+            ".prod-price",
+        ):
             tag = soup.select_one(sel)
             if tag:
-                m = re.search(r"([\d\s\u00A0]+)\s*₽", tag.get_text(separator=" ", strip=True))
+                m = re.search(
+                    r"([\d\s\u00A0]+)\s*₽", tag.get_text(separator=" ", strip=True)
+                )
                 if m:
                     price = float(m.group(1).replace("\u00a0", "").replace(" ", ""))
                 break
 
         ean = None
-        for cand in soup.find_all(string=lambda s: s and any(k in s.lower() for k in ("артикул", "ean", "арт"))):
-            m = re.search(r"(?:EAN|Артикул|арт\.?)[:\s]*([0-9A-Za-z\-]+)", cand.strip(), re.I)
+        for cand in soup.find_all(
+            string=lambda s: s and any(k in s.lower() for k in ("артикул", "ean", "арт"))
+        ):
+            m = re.search(
+                r"(?:EAN|Артикул|арт\.?)[:\s]*([0-9A-Za-z\-]+)", cand.strip(), re.I
+            )
             if m:
                 ean = m.group(1).strip()
                 break
@@ -204,25 +254,28 @@ class BasIPScraper(BaseHttpScraper):
         if not category:
             category = _category_from_url(url)
 
+        # EAN — 8–13 цифр; артикул BAS-IP — буквы-дефис-цифры (напр. AT-07L).
+        _is_ean = bool(ean and re.fullmatch(r"\d{8,13}", ean))
+        _is_sku = bool(ean and re.match(r"[A-Z]{2,3}-\d{2}", ean))
+        if not (_is_ean or _is_sku):
+            return None
+
         product_data = {
-            "source_sku": ean or title or url,
-            "brand": "BAS-IP",
+            "source_sku": ean,
+            "brand": self.source_brand,
             "model": title,
             "category": category,
             "price": price,
-            "currency": "RUB",
+            "currency": self.default_currency if price else None,
             "url": url,
         }
 
-        pairs = _extract_specs_from_container(soup) or _extract_specs_from_text_blocks(soup)
+        pairs = (
+            _extract_specs_from_container(soup)
+            or _extract_specs_from_text_blocks(soup)
+        )
         return product_data, pairs
 
 
 if __name__ == "__main__":
-    import logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(name)s] %(levelname)s %(message)s",
-        datefmt="%H:%M:%S",
-    )
-    asyncio.run(BasIPScraper().run())
+    BasIPScraper.run_standalone()

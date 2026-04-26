@@ -1,4 +1,8 @@
-from typing import Optional
+"""CRUD-операции над товарами, характеристиками и источниками."""
+
+from __future__ import annotations
+
+from typing import Optional, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,7 +11,8 @@ from sqlalchemy.orm import selectinload
 from app.db.models import Product, ProductSpec, Source
 
 
-async def get_product_by_sku(session: AsyncSession, sku: str):
+async def get_product_by_sku(session: AsyncSession, sku: str) -> Optional[Product]:
+    """Найти товар по `source_sku` с предзагрузкой характеристик."""
     q = (
         select(Product)
         .options(selectinload(Product.specs))
@@ -21,7 +26,7 @@ async def get_products_in_category(
     session: AsyncSession,
     category: str,
     exclude_product_id: Optional[int] = None,
-):
+) -> Sequence[Product]:
     """Вернуть все товары категории с подгруженными характеристиками.
 
     `exclude_product_id` отсекает сам target прямо в SQL — иначе он
@@ -38,7 +43,8 @@ async def get_products_in_category(
     return res.scalars().all()
 
 
-async def upsert_product(session: AsyncSession, product_data: dict):
+async def upsert_product(session: AsyncSession, product_data: dict) -> Product:
+    """Создать товар или обновить существующий по `(source_id, source_sku)`."""
     q = select(Product).where(
         Product.source_id == product_data["source_id"],
         Product.source_sku == product_data["source_sku"],
@@ -63,12 +69,13 @@ async def add_spec(
     session: AsyncSession,
     product_id: int,
     spec_name: str,
-    value_text: str = None,
-    value_num=None,
-    unit: str = None,
-    spec_name_canonical: str = None,
+    value_text: Optional[str] = None,
+    value_num: Optional[float] = None,
+    unit: Optional[str] = None,
+    spec_name_canonical: Optional[str] = None,
     weight: float = 1.0,
-):
+) -> ProductSpec:
+    """Добавить одну характеристику товара и сохранить в БД."""
     s = ProductSpec(
         product_id=product_id,
         spec_name=spec_name,
@@ -83,7 +90,12 @@ async def add_spec(
     return s
 
 
-async def create_source_if_missing(session: AsyncSession, name: str, base_url: str):
+async def create_source_if_missing(
+    session: AsyncSession,
+    name: str,
+    base_url: str,
+) -> Source:
+    """Найти источник по `base_url` или создать новый."""
     q = select(Source).where(Source.base_url == base_url)
     r = await session.execute(q)
     existing = r.scalars().first()

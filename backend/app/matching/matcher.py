@@ -62,9 +62,7 @@ def _collect_specs(
     overrides = overrides or {}
     out: dict[str, SpecTuple] = {}
     for s in getattr(product, "specs", []) or []:
-        canonical = s.spec_name_canonical or canonicalize_spec_name(
-            s.spec_name
-        )
+        canonical = s.spec_name_canonical or canonicalize_spec_name(s.spec_name)
         if not canonical:
             continue
         num = float(s.spec_value_num) if s.spec_value_num is not None else None

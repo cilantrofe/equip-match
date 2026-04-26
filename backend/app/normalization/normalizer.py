@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal, Optional
 import re
 
@@ -36,33 +37,77 @@ class NormalizedValue:
 
 
 UNIT_ALIASES: dict[str, str] = {
-    "в": "V", "v": "V", "вольт": "V", "volt": "V", "volts": "V",
-    "а": "A", "a": "A", "ма": "mA", "ma": "mA",
-    "вт": "W", "w": "W", "watt": "W", "watts": "W",
-    "мм": "mm", "mm": "mm",
-    "см": "cm", "cm": "cm",
-    "м": "m", "meter": "m", "meters": "m", "метр": "m",
-    "дюйм": "inch", "дюйма": "inch", "дюймов": "inch",
-    "in": "inch", "inch": "inch", '"': "inch", "″": "inch",
-    "гц": "Hz", "hz": "Hz",
-    "кгц": "kHz", "khz": "kHz",
-    "мгц": "MHz", "mhz": "MHz",
-    "ггц": "GHz", "ghz": "GHz",
-    "кб": "KB", "kb": "KB",
-    "мб": "MB", "mb": "MB",
-    "гб": "GB", "gb": "GB",
-    "тб": "TB", "tb": "TB",
-    "кг": "kg", "kg": "kg",
-    "г": "g", "g": "g",
-    "мс": "ms", "ms": "ms",
-    "с": "s", "sec": "s",
-    "мин": "min", "min": "min",
-    "°c": "C", "c°": "C", "°с": "C", "с°": "C",
-    "°": "deg", "deg": "deg", "градус": "deg",
-    "fps": "fps", "к/с": "fps", "кадр/с": "fps",
-    "мп": "MP", "mp": "MP",
-    "лк": "lux", "lux": "lux", "люкс": "lux",
-    "дб": "dB", "db": "dB",
+    "в": "V",
+    "v": "V",
+    "вольт": "V",
+    "volt": "V",
+    "volts": "V",
+    "а": "A",
+    "a": "A",
+    "ма": "mA",
+    "ma": "mA",
+    "вт": "W",
+    "w": "W",
+    "watt": "W",
+    "watts": "W",
+    "мм": "mm",
+    "mm": "mm",
+    "см": "cm",
+    "cm": "cm",
+    "м": "m",
+    "meter": "m",
+    "meters": "m",
+    "метр": "m",
+    "дюйм": "inch",
+    "дюйма": "inch",
+    "дюймов": "inch",
+    "in": "inch",
+    "inch": "inch",
+    '"': "inch",
+    "″": "inch",
+    "гц": "Hz",
+    "hz": "Hz",
+    "кгц": "kHz",
+    "khz": "kHz",
+    "мгц": "MHz",
+    "mhz": "MHz",
+    "ггц": "GHz",
+    "ghz": "GHz",
+    "кб": "KB",
+    "kb": "KB",
+    "мб": "MB",
+    "mb": "MB",
+    "гб": "GB",
+    "gb": "GB",
+    "тб": "TB",
+    "tb": "TB",
+    "кг": "kg",
+    "kg": "kg",
+    "г": "g",
+    "g": "g",
+    "мс": "ms",
+    "ms": "ms",
+    "с": "s",
+    "sec": "s",
+    "мин": "min",
+    "min": "min",
+    "°c": "C",
+    "c°": "C",
+    "°с": "C",
+    "с°": "C",
+    "°": "deg",
+    "deg": "deg",
+    "градус": "deg",
+    "fps": "fps",
+    "к/с": "fps",
+    "кадр/с": "fps",
+    "мп": "MP",
+    "mp": "MP",
+    "лк": "lux",
+    "lux": "lux",
+    "люкс": "lux",
+    "дб": "dB",
+    "db": "dB",
     "%": "%",
 }
 
@@ -99,15 +144,18 @@ _UNIT_CHARS_RE = re.compile(r"^[a-zA-Zа-яА-Я°/²³%\s\.\-]+$")
 
 _TRAILING_UNIT_RE = re.compile(r"([a-zA-Zа-яА-Я°%/²³]+)\s*$")
 
-_BOOL_TRUE = frozenset({"да", "yes", "есть", "поддерживается", "поддержка", "true", "1", "+"})
-_BOOL_FALSE = frozenset({"нет", "no", "отсутствует", "не поддерживается", "false", "0", "-"})
+_BOOL_TRUE = frozenset(
+    {"да", "yes", "есть", "поддерживается", "поддержка", "true", "1", "+"}
+)
+_BOOL_FALSE = frozenset(
+    {"нет", "no", "отсутствует", "не поддерживается", "false", "0", "-"}
+)
 
 
 def _clean(text: str) -> str:
     """Убрать пробелы по краям и привести юникод-пробелы к обычному."""
     return (
-        text
-        .replace("\xa0", " ")
+        text.replace("\xa0", " ")
         .replace("\u202f", " ")
         .replace("\u2212", "-")  # Unicode minus sign → hyphen-minus
         .strip()
@@ -122,6 +170,8 @@ def _normalize_unit(token: Optional[str]) -> Optional[str]:
     """
     if not token:
         return None
+    if len(token) > 20:
+        return None
     key = token.strip().lower().rstrip(".,;")
     if not key:
         return None
@@ -130,7 +180,8 @@ def _normalize_unit(token: Optional[str]) -> Optional[str]:
 
 def _to_float(s: str) -> float:
     """Преобразовать строку в число, принимая и точку, и запятую."""
-    return float(s.replace(",", "."))
+    d = Decimal(s.replace(",", "."))
+    return float(d.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP))
 
 
 def _format_num(n: float) -> str:
@@ -167,11 +218,14 @@ def _try_fraction(text: str) -> Optional[NormalizedValue]:
     return NormalizedValue(value_text=canonical, unit=unit, kind="fraction")
 
 
+_UP_TO_RE = re.compile(r"^(?:до|не\s+более|up\s+to)\s+", re.IGNORECASE)
+
+
 def _try_dimension(text: str) -> Optional[NormalizedValue]:
     if not _DIMENSION_SEP_RE.search(text):
         return None
     parts = _DIMENSION_SEP_RE.split(text)
-    if len(parts) < 2:
+    if len(parts) < 2 or len(parts) > 4:
         return None
     nums: list[str] = []
     for part in parts:
@@ -181,9 +235,7 @@ def _try_dimension(text: str) -> Optional[NormalizedValue]:
         nums.append(_format_num(_to_float(match.group(1))))
     trailing = _TRAILING_UNIT_RE.search(parts[-1])
     unit = _normalize_unit(trailing.group(1)) if trailing else None
-    return NormalizedValue(
-        value_text="x".join(nums), unit=unit, kind="dimension"
-    )
+    return NormalizedValue(value_text="x".join(nums), unit=unit, kind="dimension")
 
 
 def _try_range(text: str) -> Optional[NormalizedValue]:
@@ -229,7 +281,17 @@ def normalize_value(raw: Optional[str]) -> NormalizedValue:
     if _has_standard(text):
         return NormalizedValue(value_text=text, kind="standard")
 
-    parsers = (_try_boolean, _try_fraction, _try_dimension, _try_range, _try_plain_number)
+    text = _UP_TO_RE.sub("", text).strip()
+    if not text:
+        return NormalizedValue(kind="empty")
+
+    parsers = (
+        _try_boolean,
+        _try_fraction,
+        _try_dimension,
+        _try_range,
+        _try_plain_number,
+    )
     for parser in parsers:
         result = parser(text)
         if result is not None:

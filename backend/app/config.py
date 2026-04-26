@@ -1,2 +1,7 @@
+"""Конфигурация приложения из переменных окружения."""
+
+from __future__ import annotations
+
 import os
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://pm:pm_pass@localhost:5432/product_matcher")
+
+DATABASE_URL: str = os.environ["DATABASE_URL"]

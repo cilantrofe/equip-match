@@ -1,40 +1,62 @@
+"""Скрапер Camerussia Smart House (импорт из локальных JSON-файлов).
+
+Читает JSON-файлы из директории `camerussia_jsons/`, извлекает товары
+через `extract_products_from_api_response` и сохраняет их в БД.
+Формат файлов — ответы API каталога camerussia.com.
+"""
+
+from __future__ import annotations
+
 import argparse
 import asyncio
 import json
 import logging
 import os
 from glob import glob
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from urllib.parse import urljoin
 
 from app.db.session import async_session
-from app.scrapers.base import ALLOWED_CATEGORIES, BaseScraper
+from app.scrapers.base import BaseScraper
 
 BASE = "https://camerussia.com"
 CATALOG_PATH = "/catalog/smart-house/"
 
 
 def _load_json_file(path: str) -> Any:
-    with open(path, "r", encoding="utf-8") as f:
+    """Прочитать JSON-файл и вернуть десериализованный объект."""
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
 def _list_json_files(dir_path: str) -> list[str]:
+    """Вернуть отсортированный список путей к `*.json`-файлам в директории."""
     return sorted(glob(os.path.join(dir_path, "*.json")))
 
 
 def _category_from_filename(filename: str) -> str:
+    """Определить категорию товара по имени файла."""
     base = os.path.basename(filename).lower()
     if "abonent_ip" in base:
         return "Видеомонитор"
     return "Вызывная панель"
 
 
-def extract_products_from_api_response(parsed_json: Any, filename: str = "") -> List[Dict[str, Any]]:
+def extract_products_from_api_response(
+    parsed_json: Any,
+    filename: str = "",
+) -> list[dict[str, Any]]:
+    """Извлечь список товаров из разобранного JSON API-ответа.
+
+    Поддерживает несколько форматов ответа: список на верхнем уровне,
+    обёртка с ключами `products`/`items`/`data`/`result`/`list` и
+    произвольные словари со списками объектов, похожих на товары.
+    Категория берётся из полей объекта или определяется по имени файла.
+    """
     if not parsed_json:
         return []
 
-    candidates = None
+    candidates: Optional[list] = None
     if isinstance(parsed_json, dict):
         for key in ("products", "items", "data", "result", "list"):
             val = parsed_json.get(key)
@@ -61,12 +83,13 @@ def extract_products_from_api_response(parsed_json: Any, filename: str = "") -> 
     if not candidates:
         return []
 
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for it in candidates:
         if not isinstance(it, dict):
             continue
 
         name = it.get("name") or it.get("full_name") or it.get("title") or None
+
         price = it.get("price")
         try:
             price = float(price) if price is not None else None
@@ -83,37 +106,57 @@ def extract_products_from_api_response(parsed_json: Any, filename: str = "") -> 
 
         code = it.get("code") or it.get("sku") or None
 
-        params: Dict[str, Any] = {}
+        params: dict[str, Any] = {}
         for p in it.get("parameters") or it.get("params") or []:
             if not isinstance(p, dict):
                 continue
             pname = p.get("name") or p.get("param_name")
             if not pname:
                 continue
-            params[pname] = p.get("value_float") if p.get("value_float") is not None else p.get("value")
+            params[pname] = (
+                p.get("value_float")
+                if p.get("value_float") is not None
+                else p.get("value")
+            )
 
         slug = it.get("url") or it.get("product_url") or it.get("slug")
-        full_url = None
+        full_url: Optional[str] = None
         if slug:
-            if isinstance(slug, str) and (slug.startswith("http://") or slug.startswith("https://")):
+            if isinstance(slug, str) and (
+                slug.startswith("http://") or slug.startswith("https://")
+            ):
                 full_url = slug
             else:
                 full_url = urljoin(BASE, f"/product/{slug}")
 
         brand = (
-            it.get("brand") or it.get("manufacturer") or it.get("PROPERTY_BRAND_VALUE")
-            or it.get("vendor") or "Camerussia"
+            it.get("brand")
+            or it.get("manufacturer")
+            or it.get("PROPERTY_BRAND_VALUE")
+            or it.get("vendor")
+            or "Camerussia"
         )
 
-        category = None
-        for cat_key in ("section", "sections", "category", "categories", "SECTION_NAME", "iblock_section"):
+        category: Optional[str] = None
+        for cat_key in (
+            "section",
+            "sections",
+            "category",
+            "categories",
+            "SECTION_NAME",
+            "iblock_section",
+        ):
             val = it.get(cat_key)
             if isinstance(val, str) and val:
                 category = val
                 break
             if isinstance(val, list) and val:
                 first = val[0]
-                category = first.get("name") or first.get("NAME") or str(first) if isinstance(first, dict) else str(first)
+                category = (
+                    first.get("name") or first.get("NAME") or str(first)
+                    if isinstance(first, dict)
+                    else str(first)
+                )
                 break
             if isinstance(val, dict) and val:
                 category = val.get("name") or val.get("NAME") or val.get("title")
@@ -121,28 +164,32 @@ def extract_products_from_api_response(parsed_json: Any, filename: str = "") -> 
         if not category:
             category = _category_from_filename(filename)
 
-
-        out.append({
-            "url": full_url,
-            "name": name,
-            "price": price,
-            "image": image,
-            "params": params,
-            "code": code,
-            "brand": brand,
-            "category": category,
-            "raw_api_obj": it,
-        })
+        out.append(
+            {
+                "url": full_url,
+                "name": name,
+                "price": price,
+                "image": image,
+                "params": params,
+                "code": code,
+                "brand": brand,
+                "category": category,
+                "raw_api_obj": it,
+            }
+        )
 
     return out
 
 
 class CamerussiaScraper(BaseScraper):
+    """Скрапер Camerussia: импортирует товары из локальных JSON-файлов."""
+
     source_name = "Camerussia Smart House (imported json)"
     source_url = BASE + CATALOG_PATH
     data_dir: str = "./camerussia_jsons"
 
-    async def _save_products(self, products: List[Dict[str, Any]]) -> int:
+    async def _save_products(self, products: list[dict[str, Any]]) -> int:
+        """Сохранить список товаров в БД, вернуть количество сохранённых."""
         async with async_session() as session:
             source_id = await self.get_or_create_source(session)
             saved = 0
@@ -154,11 +201,17 @@ class CamerussiaScraper(BaseScraper):
                     "model": prod.get("name"),
                     "category": prod.get("category"),
                     "price": prod.get("price"),
-                    "currency": "RUB" if prod.get("price") is not None else None,
+                    "currency": (
+                        self.default_currency if prod.get("price") is not None else None
+                    ),
                     "url": prod.get("url"),
                 }
-                if product_data.get("category") not in ALLOWED_CATEGORIES:
-                    self._log.debug("Category %r not allowed — skipping: %s", product_data.get("category"), prod.get("name"))
+                if not self._is_allowed_category(product_data.get("category")):
+                    self._log.debug(
+                        "Category %r not allowed — skipping: %s",
+                        product_data.get("category"),
+                        prod.get("name"),
+                    )
                     continue
                 try:
                     product = await self.save_product(session, product_data)
@@ -166,13 +219,16 @@ class CamerussiaScraper(BaseScraper):
                     self._log.exception("Failed to save product: %s", prod.get("name"))
                     continue
 
-                # Build spec pairs from params only — image/price/code go into Product fields
                 pairs: list[tuple[str, str]] = []
                 for k, v in (prod.get("params") or {}).items():
                     if v is None:
                         continue
                     if isinstance(v, dict):
-                        v = v.get("value_float") if v.get("value_float") is not None else v.get("value")
+                        v = (
+                            v.get("value_float")
+                            if v.get("value_float") is not None
+                            else v.get("value")
+                        )
                     if v is None:
                         continue
                     pairs.append((str(k), str(v)))
@@ -183,8 +239,8 @@ class CamerussiaScraper(BaseScraper):
         return saved
 
     async def run(self) -> None:
+        """Прочитать все JSON-файлы из `data_dir` и сохранить товары в БД."""
         self._log.info("Starting — data_dir: %s", self.data_dir)
-        # Both glob and file reads are sync I/O — offload to thread pool
         files = await asyncio.to_thread(_list_json_files, self.data_dir)
         if not files:
             self._log.warning("No JSON files found in %s", self.data_dir)
@@ -200,16 +256,21 @@ class CamerussiaScraper(BaseScraper):
                 continue
 
             products = extract_products_from_api_response(data, filename=fp)
-            self._log.info("%s — %d products found", os.path.basename(fp), len(products))
+            self._log.info(
+                "%s — %d products found", os.path.basename(fp), len(products)
+            )
             if products:
                 saved = await self._save_products(products)
                 total_saved += saved
-                self._log.info("%s — saved %d / %d", os.path.basename(fp), saved, len(products))
+                self._log.info(
+                    "%s — saved %d / %d", os.path.basename(fp), saved, len(products)
+                )
 
         self._log.info("Done — total saved: %d", total_saved)
 
 
 def main() -> None:
+    """CLI-точка входа: разобрать аргументы и запустить скрапер."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(name)s] %(levelname)s %(message)s",
@@ -218,8 +279,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Import camerussia JSON files and save products to DB"
     )
-    parser.add_argument("--dir", "-d", default="./camerussia_jsons",
-                        help="Directory with JSON files")
+    parser.add_argument(
+        "--dir", "-d", default="./camerussia_jsons", help="Directory with JSON files"
+    )
     args = parser.parse_args()
 
     dir_path = os.path.abspath(args.dir)

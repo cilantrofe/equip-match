@@ -1,39 +1,87 @@
-import asyncio
-from typing import Any, Dict, Iterable
+"""Скрапер API сайта comelitrussia.clients.site.
+
+Получает товары постранично через POST-запросы к JSON API,
+фильтрует по разрешённым категориям и сохраняет в БД.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Iterable
 
 import aiohttp
 
 from app.db.session import async_session
-from app.scrapers.base import ALLOWED_CATEGORIES, BaseScraper
+from app.scrapers.base import BaseScraper
 
-BASE_API = "https://comelitrussia.clients.site/api/get-products?slug=comelitrussia&new=1"
+BASE_API = (
+    "https://comelitrussia.clients.site/api/get-products?slug=comelitrussia&new=1"
+)
+
 HEADERS = {
     "User-Agent": "Mozilla/5.0",
     "Content-Type": "application/json;charset=utf-8",
     "Accept": "application/json, text/plain, */*",
 }
+
 PERMALINK = "177598775019"
 
-# Top-level keys that map to Product fields — not specs
-_PRODUCT_LEVEL_KEYS = {
-    "name", "title", "article", "sku", "id", "permalink",
-    "price", "price_raw", "currency", "category", "categories",
-    "images", "image", "description", "slug", "url", "link",
-    "cost", "costdata", "costData", "isAvailable", "isDeleted", "source",
-}
+# Поля верхнего уровня объекта товара — они идут в Product, а не в характеристики.
+_PRODUCT_LEVEL_KEYS: frozenset[str] = frozenset(
+    {
+        "name",
+        "title",
+        "article",
+        "sku",
+        "id",
+        "permalink",
+        "price",
+        "price_raw",
+        "currency",
+        "category",
+        "categories",
+        "images",
+        "image",
+        "description",
+        "slug",
+        "url",
+        "link",
+        "cost",
+        "costdata",
+        "costData",
+        "isAvailable",
+        "isDeleted",
+        "source",
+    }
+)
 
 
-async def fetch_page(session: aiohttp.ClientSession, limit: int, offset: int) -> Dict[str, Any]:
-    payload = {"permalink": PERMALINK, "limit": limit, "offset": offset, "slug": "comelitrussia"}
+async def fetch_page(
+    session: aiohttp.ClientSession,
+    limit: int,
+    offset: int,
+) -> dict[str, Any]:
+    """Запросить одну страницу товаров у API Comelit.
+
+    Возвращает словарь с ключами `items`, `total` и `raw` (сырой ответ).
+    """
+    payload = {
+        "permalink": PERMALINK,
+        "limit": limit,
+        "offset": offset,
+        "slug": "comelitrussia",
+    }
     async with session.post(BASE_API, json=payload, timeout=60) as resp:
         resp.raise_for_status()
         j = await resp.json(content_type=None, encoding="utf-8")
-    items = j.get("result") or j.get("data") or j.get("items") or j.get("products") or []
+    items = (
+        j.get("result") or j.get("data") or j.get("items") or j.get("products") or []
+    )
     total = j.get("total") or j.get("count") or None
     return {"items": items, "total": total, "raw": j}
 
 
-def _iter_kv(obj) -> Iterable[tuple[str, Any]]:
+def _iter_kv(obj: Any) -> Iterable[tuple[str, Any]]:
+    """Обойти dict или list[dict] и выдать пары (ключ, значение)."""
     if isinstance(obj, dict):
         yield from obj.items()
     elif isinstance(obj, list):
@@ -47,7 +95,8 @@ def _iter_kv(obj) -> Iterable[tuple[str, Any]]:
                     yield from el.items()
 
 
-def _build_spec_pairs(product_json: Dict[str, Any]) -> list[tuple[str, str]]:
+def _build_spec_pairs(product_json: dict[str, Any]) -> list[tuple[str, str]]:
+    """Собрать пары (название, значение) из полей объекта товара, исключая служебные."""
     pairs: list[tuple[str, str]] = []
     for k, v in product_json.items():
         if not k or k in _PRODUCT_LEVEL_KEYS or v is None:
@@ -62,18 +111,31 @@ def _build_spec_pairs(product_json: Dict[str, Any]) -> list[tuple[str, str]]:
 
 
 class ComelitClientsScraper(BaseScraper):
+    """Скрапер comelitrussia.clients.site: получает товары через JSON API."""
+
     source_name = "Comelit Clients Site API"
     source_url = "https://comelitrussia.clients.site"
+    source_brand = "Comelit"
 
-    async def _save_item(self, session_db, source_id: int, item: Dict[str, Any]) -> None:
+    async def _save_item(
+        self,
+        session_db: Any,
+        source_id: int,
+        item: dict[str, Any],
+    ) -> None:
+        """Разобрать объект товара из API и сохранить в БД."""
         name_obj = item.get("name") or {}
-        name = (name_obj.get("origin") or name_obj.get("translated")
-                if isinstance(name_obj, dict) else str(name_obj) if name_obj else None)
+        name: str | None = (
+            name_obj.get("origin") or name_obj.get("translated")
+            if isinstance(name_obj, dict)
+            else str(name_obj) if name_obj
+            else None
+        )
 
         sku = item.get("id") or item.get("article") or item.get("permalink") or None
 
         raw_price = item.get("costData") or item.get("cost") or item.get("price")
-        price = None
+        price: float | None = None
         if isinstance(raw_price, str):
             try:
                 price = float("".join(ch for ch in raw_price if ch.isdigit()))
@@ -82,7 +144,7 @@ class ComelitClientsScraper(BaseScraper):
         elif isinstance(raw_price, (int, float)):
             price = float(raw_price)
 
-        category = None
+        category: str | None = None
         cats = item.get("categories")
         if isinstance(cats, list) and cats:
             first = cats[0]
@@ -91,23 +153,33 @@ class ComelitClientsScraper(BaseScraper):
 
         product_data = {
             "source_id": source_id,
-            "source_sku": str(sku) if sku is not None else (name or f"comelit-{id(item)}"),
-            "brand": "Comelit",
-            "model": name or None,
+            "source_sku": (
+                str(sku) if sku is not None else (name or f"comelit-{id(item)}")
+            ),
+            "brand": self.source_brand,
+            "model": name.strip() if name else None,
             "category": category,
             "price": price,
-            "currency": "RUB" if price else None,
-            "url": f"https://comelitrussia.clients.site/?permalink={sku}" if sku else None,
+            "currency": self.default_currency if price else None,
+            "url": (
+                f"https://comelitrussia.clients.site/?permalink={sku}" if sku else None
+            ),
         }
 
-        if product_data.get("category") not in ALLOWED_CATEGORIES:
-            self._log.debug("Category %r not allowed — skipping: %s", product_data.get("category"), sku)
+        if not self._is_allowed_category(product_data.get("category")):
+            self._log.debug(
+                "Category %r not allowed — skipping: %s",
+                product_data.get("category"),
+                sku,
+            )
             return
+
         product = await self.save_product(session_db, product_data)
         pairs = _build_spec_pairs(item)
         await self.save_specs(session_db, product.id, pairs)
 
     async def run(self, limit: int = 50) -> None:
+        """Получить все страницы API и сохранить товары в БД."""
         self._log.info("Starting — %s", BASE_API)
         async with aiohttp.ClientSession(headers=HEADERS) as session:
             async with async_session() as db_sess:
@@ -132,7 +204,10 @@ class ComelitClientsScraper(BaseScraper):
                             await self._save_item(db_sess, source_id, item)
                         total_saved += 1
                     except Exception:
-                        self._log.exception("Failed to save item: %s", item.get("id") or item.get("name"))
+                        self._log.exception(
+                            "Failed to save item: %s",
+                            item.get("id") or item.get("name"),
+                        )
 
                 offset += limit
                 if total is not None and offset >= int(total):
@@ -142,10 +217,4 @@ class ComelitClientsScraper(BaseScraper):
 
 
 if __name__ == "__main__":
-    import logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(name)s] %(levelname)s %(message)s",
-        datefmt="%H:%M:%S",
-    )
-    asyncio.run(ComelitClientsScraper().run(limit=50))
+    ComelitClientsScraper.run_standalone(limit=50)

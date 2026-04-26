@@ -1,4 +1,8 @@
-from sqlalchemy import Column, Integer, Text, Numeric, ForeignKey, TIMESTAMP
+"""ORM-модели базы данных."""
+
+from __future__ import annotations
+
+from sqlalchemy import Column, ForeignKey, Integer, Numeric, Text, TIMESTAMP
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.sql import func
 
@@ -6,7 +10,10 @@ Base = declarative_base()
 
 
 class Source(Base):
+    """Источник товаров (сайт-скрапер)."""
+
     __tablename__ = "sources"
+
     id = Column(Integer, primary_key=True)
     name = Column(Text, nullable=False)
     base_url = Column(Text)
@@ -14,7 +21,10 @@ class Source(Base):
 
 
 class Product(Base):
+    """Товар из конкретного источника."""
+
     __tablename__ = "products"
+
     id = Column(Integer, primary_key=True)
     source_id = Column(Integer, ForeignKey("sources.id"))
     source_sku = Column(Text, index=True)
@@ -25,15 +35,16 @@ class Product(Base):
     currency = Column(Text)
     url = Column(Text)
     created_at = Column(TIMESTAMP, server_default=func.now())
-    updated_at = Column(
-        TIMESTAMP, server_default=func.now(), onupdate=func.now()
-    )
+    updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
 
     specs = relationship("ProductSpec", back_populates="product")
 
 
 class ProductSpec(Base):
+    """Одна характеристика товара."""
+
     __tablename__ = "product_specs"
+
     id = Column(Integer, primary_key=True)
     product_id = Column(Integer, ForeignKey("products.id"), index=True)
     spec_name = Column(Text)
