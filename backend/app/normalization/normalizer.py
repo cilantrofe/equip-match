@@ -300,6 +300,66 @@ def normalize_value(raw: Optional[str]) -> NormalizedValue:
     return NormalizedValue(value_text=text, kind="text")
 
 
+_TEMP_NUM_RE = re.compile(r"[+-]?\d+(?:[.,]\d+)?")
+
+
+def normalize_temperature_range(raw: Optional[str]) -> Optional[str]:
+    """Извлечь числа из строки температурного диапазона и вернуть в виде «min...max».
+
+    Примеры: «-10°C ~ +45°C» → «-10...45», «-40...+85 °C» → «-40...85».
+    Возвращает None, если не удалось найти два числа.
+    """
+    if not raw:
+        return None
+    text = _clean(str(raw))
+    nums = _TEMP_NUM_RE.findall(text)
+    if len(nums) < 2:
+        return None
+    parts = [_format_num(_to_float(n)) for n in nums[:2]]
+    return f"{parts[0]}...{parts[1]}"
+
+
+def normalize_for_spec(canonical: str, raw: Optional[str]) -> NormalizedValue:
+    """Нормализовать значение с учётом канонического имени характеристики.
+
+    Обёртка над `normalize_value`, применяющая дополнительные правила
+    для конкретных canonical: конвертация единиц, снятие префиксов и т.п.
+    Вся логика нормализации должна жить здесь, а не в скраперах.
+    """
+    nv = normalize_value(raw)
+    if nv.kind == "empty":
+        return nv
+
+    vt = nv.value_text
+    vn = nv.value_num
+    u = nv.unit
+
+    if canonical == "weight" and vn is not None and vn < 1:
+        vn = round(vn * 1000, 2)
+        vt = str(int(vn)) if vn == int(vn) else str(vn)
+        u = "g"
+
+    elif canonical == "ip_rating" and vt:
+        stripped = re.sub(r"(?i)^ip\s*", "", vt).strip()
+        if stripped:
+            vt = stripped
+
+    elif canonical == "ik_rating" and vt:
+        stripped = re.sub(r"(?i)^ik\s*", "", vt).strip()
+        if stripped:
+            vt = stripped
+
+    elif canonical == "temperature_range":
+        temp = normalize_temperature_range(vt or raw)
+        if temp:
+            vt = temp
+            vn = None
+
+    if vt == nv.value_text and vn == nv.value_num and u == nv.unit:
+        return nv
+    return NormalizedValue(value_num=vn, value_text=vt, unit=u, kind=nv.kind)
+
+
 def parse_number_and_unit(
     text: Optional[str],
 ) -> tuple[Optional[float], Optional[str]]:

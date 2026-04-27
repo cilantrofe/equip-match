@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.crud import create_source_if_missing, upsert_product
 from app.db.models import ProductSpec
 from app.db.session import async_session
-from app.normalization.normalizer import normalize_value
+from app.normalization.normalizer import normalize_for_spec
 from app.normalization.spec_aliases import canonicalize_spec_name, weight_for
 
 ALLOWED_CATEGORIES: frozenset[str] = frozenset({"Видеомонитор", "Вызывная панель"})
@@ -115,7 +115,7 @@ class BaseScraper(ABC):
                 continue
             if canonical in seen:
                 continue
-            nv = normalize_value(raw_value if raw_value is not None else "")
+            nv = normalize_for_spec(canonical, raw_value if raw_value is not None else "")
             if nv.kind == "empty":
                 continue
             seen[canonical] = (raw_name, nv)
