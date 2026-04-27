@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EquipMatch — Подбор аналогов оборудования</title>
+  <style>
+    :root {
+      --green:       #22c55e;
+      --green-dark:  #16a34a;
+      --green-light: #dcfce7;
+      --text:        #0f172a;
+      --muted:       #64748b;
+      --border:      #e2e8f0;
+      --r-card:      28px;
+      --r-pill:      999px;
+      --r-sm:        14px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: linear-gradient(135deg, #bbf7d0 0%, #86efac 55%, #4ade80 100%);
+    }
+
+    /* ── Main split card ── */
+    .card {
+      width: min(1020px, 100%);
+      display: grid;
+      grid-template-columns: 400px 1fr;
+      border-radius: var(--r-card);
+      box-shadow: 0 32px 80px rgba(0,0,0,0.13);
+      overflow: hidden;
+    }
+
+    /* ── Left green panel ── */
+    .left {
+      background: linear-gradient(160deg, #4ade80 0%, #22c55e 55%, #16a34a 100%);
+      padding: 44px 38px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .left::before, .left::after {
+      content: '';
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.08);
+    }
+    .left::before { width: 320px; height: 320px; top: -100px; right: -100px; }
+    .left::after  { width: 200px; height: 200px; bottom: -70px; left: -70px; }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: white;
+      position: relative;
+      z-index: 1;
+    }
+
+    .logo-icon {
+      width: 38px; height: 38px;
+      background: rgba(255,255,255,0.22);
+      border-radius: 11px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .logo-icon svg { width: 20px; height: 20px; stroke: white; stroke-width: 2; fill: none; }
+    .logo-name { font-size: 20px; font-weight: 800; letter-spacing: -0.03em; }
+
+    .left-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .left h2 {
+      margin: 0;
+      font-size: 30px;
+      font-weight: 800;
+      color: white;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+    }
+
+    .left-desc {
+      margin: 0;
+      color: rgba(255,255,255,0.78);
+      font-size: 16px;
+      line-height: 1.65;
+    }
+
+    .feature-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .feature {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .feature-icon {
+      width: 30px; height: 30px;
+      border-radius: 9px;
+      background: rgba(255,255,255,0.20);
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .feature-icon svg { width: 14px; height: 14px; stroke: white; stroke-width: 2.2; fill: none; }
+
+    .feature-text strong { display: block; color: white; font-size: 15px; margin-bottom: 3px; }
+    .feature-text span { color: rgba(255,255,255,0.68); font-size: 13px; line-height: 1.45; }
+
+    .brands-footer {
+      position: relative;
+      z-index: 1;
+    }
+
+    .brands-label {
+      font-size: 11px;
+      color: rgba(255,255,255,0.60);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 8px;
+    }
+
+    .brands-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .brand-pill {
+      padding: 5px 12px;
+      border-radius: var(--r-pill);
+      background: rgba(255,255,255,0.16);
+      border: 1px solid rgba(255,255,255,0.22);
+      color: white;
+      font-size: 12px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: .15s;
+    }
+    .brand-pill:hover { background: rgba(255,255,255,0.28); }
+
+    /* ── Right white panel ── */
+    .right {
+      background: white;
+      padding: 44px 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      overflow-y: auto;
+      max-height: 92vh;
+    }
+
+    .right-heading {
+      margin: 0;
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+    }
+
+    .right-sub {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    /* ── Form elements ── */
+    .field { display: grid; gap: 6px; }
+
+    label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .row { display: flex; gap: 8px; align-items: stretch; }
+
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      border: 1.5px solid var(--border);
+      background: white;
+      color: var(--text);
+      padding: 13px 18px;
+      border-radius: var(--r-pill);
+      outline: none;
+      font-size: 14px;
+      font-family: inherit;
+      transition: border-color .2s, box-shadow .2s;
+    }
+
+    input:focus {
+      border-color: var(--green);
+      box-shadow: 0 0 0 3px rgba(34,197,94,0.13);
+    }
+
+    input[type="number"] {
+      max-width: 82px;
+      text-align: center;
+      padding-left: 8px;
+      padding-right: 8px;
+    }
+
+    /* Mode buttons */
+    .mode-toggle { display: flex; gap: 8px; }
+
+    .mode-btn {
+      flex: 1;
+      padding: 12px 14px;
+      border-radius: var(--r-pill);
+      border: 1.5px solid var(--border);
+      background: white;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      transition: .2s;
+      box-shadow: none;
+    }
+
+    .mode-btn.active {
+      border-color: var(--green);
+      color: var(--green-dark);
+      background: var(--green-light);
+      box-shadow: 0 0 0 3px rgba(34,197,94,0.10);
+    }
+
+    .mode-btn:hover:not(.active) {
+      border-color: #cbd5e1;
+      background: #f8fafc;
+      color: var(--text);
+    }
+
+    /* Submit */
+    .btn {
+      width: 100%;
+      border: 0;
+      border-radius: var(--r-pill);
+      padding: 14px 22px;
+      color: white;
+      font-size: 14px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      background: var(--green);
+      box-shadow: 0 4px 20px rgba(34,197,94,0.30);
+      transition: background .15s, transform .15s, box-shadow .15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: var(--green-dark);
+      box-shadow: 0 6px 28px rgba(34,197,94,0.38);
+      transform: translateY(-1px);
+    }
+
+    .btn:active:not(:disabled) { transform: translateY(0); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      display: none;
+    }
+    .btn.loading .spinner { display: block; }
+    .btn.loading .btn-label { display: none; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Status */
+    .status { font-size: 13px; color: var(--muted); min-height: 18px; }
+    .ok  { color: var(--green-dark); font-weight: 500; }
+    .err { color: #ef4444; font-weight: 500; }
+
+    /* ── Weights ── */
+    .weights-section { display: grid; gap: 10px; }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .weights-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .weight-item {
+      padding: 11px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--r-sm);
+      background: #f8fafc;
+      display: grid;
+      gap: 7px;
+    }
+
+    .weight-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .weight-name { font-size: 12px; font-weight: 600; }
+
+    .weight-val {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: var(--r-pill);
+      background: var(--green-light);
+      color: var(--green-dark);
+      font-weight: 700;
+    }
+
+    input[type="range"] {
+      width: 100%; padding: 0; height: 22px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent; border: 0; box-shadow: none;
+      cursor: pointer;
+    }
+    input[type="range"]:focus { outline: none; box-shadow: none; }
+
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 5px;
+      border-radius: 999px;
+      background: #e2e8f0;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--green);
+      margin-top: -5.5px;
+      box-shadow: 0 1px 4px rgba(34,197,94,0.35);
+    }
+    input[type="range"]::-moz-range-track {
+      height: 5px;
+      border-radius: 999px;
+      background: #e2e8f0;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--green);
+      border: none;
+      box-shadow: 0 1px 4px rgba(34,197,94,0.35);
+    }
+
+    /* ── Divider ── */
+    .divider { height: 1px; background: var(--border); }
+
+    /* ── Results ── */
+    .results { display: flex; flex-direction: column; gap: 12px; }
+
+    .results-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .results-head .rh-label {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+    .results-head .rh-line { flex: 1; height: 1px; background: var(--border); }
+
+    /* Result card */
+    .r-card {
+      border: 1.5px solid var(--border);
+      border-radius: 18px;
+      overflow: hidden;
+      transition: box-shadow .2s;
+    }
+    .r-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.07); }
+
+    .r-head {
+      padding: 13px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .r-head-left { flex: 1; min-width: 0; }
+    .r-brand { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 2px; }
+    .r-model { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .r-model a { color: var(--text); text-decoration: none; border-bottom: 1px solid rgba(15,23,42,0.14); transition: .15s; }
+    .r-model a:hover { color: var(--green-dark); border-color: var(--green); }
+
+    .score-pill {
+      flex-shrink: 0;
+      padding: 5px 13px;
+      border-radius: var(--r-pill);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .s-good { background: #dcfce7; color: #15803d; }
+    .s-warn { background: #fef9c3; color: #a16207; }
+    .s-bad  { background: #fee2e2; color: #dc2626; }
+
+    .r-meta {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      padding: 10px 16px 13px;
+      border-top: 1px solid var(--border);
+    }
+
+    .kv {
+      padding: 8px 12px;
+      border-radius: 12px;
+      background: #f8fafc;
+      border: 1px solid #f1f5f9;
+    }
+    .kv .k { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; display: block; margin-bottom: 3px; }
+    .kv .v { font-size: 12px; font-weight: 500; word-break: break-word; }
+
+    /* Breakdown toggle */
+    .bd-toggle {
+      width: 100%;
+      padding: 9px 16px;
+      border: 0;
+      border-top: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: none;
+      min-width: unset;
+      border-radius: 0;
+      transition: background .15s, color .15s;
+    }
+    .bd-toggle:hover { background: #f8fafc; color: var(--green-dark); }
+    .bd-toggle .caret { margin-left: auto; transition: transform .2s; }
+    .bd-toggle.open .caret { transform: rotate(180deg); }
+
+    .bd-body { display: none; padding: 0 16px 12px; border-top: 1px solid var(--border); overflow-x: auto; }
+    .bd-body.open { display: block; }
+
+    .bd-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .bd-table th { text-align: left; padding: 8px 8px; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--border); }
+    .bd-table td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+    .bd-table tr:last-child td { border-bottom: 0; }
+
+    .sim-wrap { display: flex; align-items: center; gap: 6px; }
+    .sim-bg { flex: 1; height: 5px; border-radius: var(--r-pill); background: #e2e8f0; overflow: hidden; }
+    .sim-fill { height: 100%; border-radius: var(--r-pill); background: var(--green); }
+    .sim-pct { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+    /* Empty state */
+    .empty-state {
+      padding: 28px 16px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    .empty-state svg { opacity: 0.22; }
+
+    .hidden { display: none !important; }
+
+    /* Feedback */
+    .feedback-btn {
+      position: fixed;
+      bottom: 20px; right: 20px;
+      width: 44px; height: 44px; min-width: 44px;
+      border-radius: var(--r-pill);
+      padding: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--green);
+      box-shadow: 0 4px 18px rgba(34,197,94,0.38);
+      border: 0; cursor: pointer;
+      transition: transform .15s, background .15s;
+      z-index: 100;
+    }
+    .feedback-btn:hover { transform: scale(1.08); background: var(--green-dark); }
+    .feedback-btn svg { width: 18px; height: 18px; stroke: white; stroke-width: 2.2; fill: none; }
+
+    /* Responsive */
+    @media (max-width: 800px) {
+      body { padding: 16px; align-items: flex-start; }
+      .card { grid-template-columns: 1fr; }
+      .left { min-height: 220px; }
+      .right { max-height: none; padding: 32px 24px; }
+      .weights-grid { grid-template-columns: 1fr; }
+      .r-meta { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+
+    <!-- ══ LEFT ══ -->
+    <div class="left">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+        <span class="logo-name">EquipMatch</span>
+      </div>
+
+      <div class="left-body">
+        <h2>Подбор аналогов оборудования</h2>
+        <p class="left-desc">
+          Умный поиск замен для устройств Smart Building — по цене и техническим характеристикам.
+        </p>
+
+        <div class="feature-list">
+          <div class="feature">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+            </div>
+            <div class="feature-text">
+              <strong>По цене</strong>
+              <span>Ближайший аналог по стоимости внутри той же категории</span>
+            </div>
+          </div>
+          <div class="feature">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/></svg>
+            </div>
+            <div class="feature-text">
+              <strong>По характеристикам</strong>
+              <span>Взвешенное сходство с детализацией по каждому параметру</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="brands-footer">
+        <div class="brands-label">Базы данных</div>
+        <div class="brands-row">
+          <a class="brand-pill" href="https://akuvox-rus.ru/produkty/" target="_blank" rel="noopener">Akuvox</a>
+          <a class="brand-pill" href="https://comelitrussia.com/" target="_blank" rel="noopener">Comelit</a>
+          <a class="brand-pill" href="https://bas-ip.ru/" target="_blank" rel="noopener">BAS-IP</a>
+          <a class="brand-pill" href="https://camerussia.com/catalog/smart-house/" target="_blank" rel="noopener">Camerussia</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ RIGHT ══ -->
+    <div class="right">
+
+      <div>
+        <h1 class="right-heading">Найти аналог</h1>
+        <p class="right-sub">Введите SKU товара и выберите режим поиска</p>
+      </div>
+
+      <!-- SKU + limit -->
+      <div class="field">
+        <label>SKU товара или модель</label>
+        <div class="row">
+          <input id="skuInput" type="text" placeholder="Напр. 5060514912768" autocomplete="off" />
+          <input id="limitInput" type="number" min="1" max="20" value="3" title="Количество аналогов (1–20)" />
+        </div>
+      </div>
+
+      <!-- Mode -->
+      <div class="field">
+        <label>Режим поиска</label>
+        <div class="mode-toggle">
+          <button class="mode-btn active" data-mode="price">По цене</button>
+          <button class="mode-btn" data-mode="tech">По характеристикам</button>
+        </div>
+      </div>
+
+      <!-- Weights -->
+      <div id="weightsPanel" class="weights-section hidden">
+        <div class="section-label">Важность параметров</div>
+        <div class="weights-grid" id="weightsGrid"></div>
+      </div>
+
+      <!-- Status -->
+      <div id="status" class="status">Введите SKU и нажмите «Найти аналоги».</div>
+
+      <!-- Button -->
+      <button class="btn" id="lookupBtn">
+        <div class="spinner"></div>
+        <span class="btn-label">Найти аналоги</span>
+      </button>
+
+      <div class="divider"></div>
+
+      <!-- Results -->
+      <div id="resultsArea">
+        <div class="empty-state">
+          <svg width="44" height="44" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" fill="none">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="M21 21l-4.35-4.35"/>
+          </svg>
+          Результаты появятся после поиска.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Feedback -->
+  <button class="feedback-btn" onclick="sendFeedback()" title="Оставить отзыв" aria-label="Оставить отзыв">
+    <svg viewBox="0 0 24 24">
+      <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+    </svg>
+  </button>
+
+  <script>
+    const API = "http://localhost:8000";
+
+    const WEIGHT_DEFS = [
+      { key: "voltage",            label: "Напряжение" },
+      { key: "temperature_range",  label: "Температура" },
+      { key: "protocol",           label: "Протокол" },
+      { key: "display_resolution", label: "Дисплей" },
+      { key: "camera_resolution",  label: "Камера" },
+      { key: "mount_type",         label: "Монтаж" },
+    ];
+
+    // Build weight sliders
+    const weightsGrid = document.getElementById("weightsGrid");
+    WEIGHT_DEFS.forEach(({ key, label }) => {
+      weightsGrid.insertAdjacentHTML("beforeend", `
+        <div class="weight-item">
+          <div class="weight-top">
+            <span class="weight-name">${label}</span>
+            <span class="weight-val" id="wb-${key}">5.0</span>
+          </div>
+          <input type="range" min="0" max="100" value="50" id="ws-${key}" aria-label="${label}" />
+        </div>
+      `);
+      document.getElementById(`ws-${key}`).addEventListener("input", e => {
+        document.getElementById(`wb-${key}`).textContent =
+          (Number(e.target.value) / 10).toFixed(1);
+      });
+    });
+
+    function getWeights() {
+      const out = {};
+      WEIGHT_DEFS.forEach(({ key }) => {
+        const w = Number(document.getElementById(`ws-${key}`).value) / 10;
+        if (w > 0) out[key] = w;
+      });
+      return out;
+    }
+
+    // Mode toggle
+    const modeButtons  = document.querySelectorAll(".mode-btn");
+    const weightsPanel = document.getElementById("weightsPanel");
+    let selectedMode   = "price";
+
+    modeButtons.forEach(btn => {
+      btn.addEventListener("click", () => {
+        modeButtons.forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        selectedMode = btn.dataset.mode;
+        weightsPanel.classList.toggle("hidden", selectedMode !== "tech");
+        statusEl.textContent = selectedMode === "price"
+          ? "Поиск по ближайшей цене внутри категории."
+          : "Поиск по взвешенному сходству технических характеристик.";
+      });
+    });
+
+    const statusEl  = document.getElementById("status");
+    const resultsEl = document.getElementById("resultsArea");
+    const lookupBtn = document.getElementById("lookupBtn");
+    const skuInput  = document.getElementById("skuInput");
+    const limitInput = document.getElementById("limitInput");
+
+    // Helpers
+    function esc(v) {
+      return String(v ?? "")
+        .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+    function fmtVal(v)   { return (v == null || v === "") ? "—" : esc(v); }
+    function fmtPrice(v) {
+      if (v == null || v === "") return "—";
+      const n = Number(v);
+      return isNaN(n) ? esc(v) : n.toLocaleString("ru-RU") + " ₽";
+    }
+    function fmtPct(v) {
+      if (v == null || v === "") return "—";
+      const n = Math.round(Number(v) * 100);
+      return isNaN(n) ? esc(v) : n + "%";
+    }
+    function scoreClass(s) {
+      const p = Number(s) * 100;
+      return p >= 70 ? "s-good" : p >= 40 ? "s-warn" : "s-bad";
+    }
+
+    // Render helpers
+    function baseCard(q) {
+      return `
+        <div class="r-card">
+          <div class="r-head">
+            <div class="r-head-left">
+              <div class="r-brand">${fmtVal(q.brand)}</div>
+              <div class="r-model">${q.url
+                ? `<a href="${esc(q.url)}" target="_blank" rel="noopener">${fmtVal(q.model)}</a>`
+                : fmtVal(q.model)}</div>
+            </div>
+          </div>
+          <div class="r-meta">
+            <div class="kv"><span class="k">Категория</span><span class="v">${fmtVal(q.category)}</span></div>
+            <div class="kv"><span class="k">Цена</span><span class="v">${fmtPrice(q.price)}</span></div>
+            <div class="kv"><span class="k">Модель</span><span class="v">${fmtVal(q.model)}</span></div>
+          </div>
+        </div>`;
+    }
+
+    function bdTable(breakdown) {
+      if (!breakdown?.length) return "";
+      const sorted = [...breakdown].sort((a, b) => (b.contribution || 0) - (a.contribution || 0));
+      const rows = sorted.slice(0, 5).map(f => `
+        <tr>
+          <td>${fmtVal(f.name)}</td>
+          <td>${fmtVal(f.target)}</td>
+          <td>${fmtVal(f.candidate)}</td>
+          <td>
+            <div class="sim-wrap">
+              <div class="sim-bg">
+                <div class="sim-fill" style="width:${Math.round((f.similarity||0)*100)}%"></div>
+              </div>
+              <span class="sim-pct">${fmtPct(f.similarity)}</span>
+            </div>
+          </td>
+        </tr>`).join("");
+      return `
+        <table class="bd-table">
+          <thead><tr><th>Параметр</th><th>Исходный</th><th>Аналог</th><th>Совпадение</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }
+
+    function candidateCard(c, idx) {
+      const hasBd = c.breakdown?.length > 0;
+      const id = `bd-${idx}`;
+      return `
+        <div class="r-card">
+          <div class="r-head">
+            <div class="r-head-left">
+              <div class="r-brand">${fmtVal(c.brand)}</div>
+              <div class="r-model">${c.url
+                ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">${fmtVal(c.model)}</a>`
+                : fmtVal(c.model)}</div>
+            </div>
+            ${c.score != null
+              ? `<span class="score-pill ${scoreClass(c.score)}">${fmtPct(c.score)}</span>`
+              : ""}
+          </div>
+          <div class="r-meta">
+            <div class="kv"><span class="k">Категория</span><span class="v">${fmtVal(c.category)}</span></div>
+            <div class="kv"><span class="k">Цена</span><span class="v">${fmtPrice(c.price)}</span></div>
+            <div class="kv"><span class="k">Модель</span><span class="v">${fmtVal(c.model)}</span></div>
+          </div>
+          ${hasBd ? `
+            <button class="bd-toggle" onclick="toggleBd(this,'${id}')">
+              <svg width="12" height="12" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none">
+                <path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+              </svg>
+              Детали сравнения
+              <svg class="caret" width="12" height="12" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+            <div class="bd-body" id="${id}">${bdTable(c.breakdown)}</div>
+          ` : ""}
+        </div>`;
+    }
+
+    function toggleBd(btn, id) {
+      btn.classList.toggle("open");
+      document.getElementById(id).classList.toggle("open");
+    }
+
+    function renderResults(data) {
+      const q = data?.query;
+      const candidates = data?.candidates ?? [];
+      if (!q) { resultsEl.innerHTML = errHtml("Неожиданный формат ответа от сервера."); return; }
+
+      resultsEl.innerHTML = `
+        <div class="results">
+          <div class="results-head">
+            <span class="rh-label">Исходное оборудование</span>
+            <div class="rh-line"></div>
+          </div>
+          ${baseCard(q)}
+          <div class="results-head">
+            <span class="rh-label">Найдено аналогов: ${candidates.length}</span>
+            <div class="rh-line"></div>
+          </div>
+          ${candidates.length === 0
+            ? `<div class="empty-state">Аналоги не найдены. Попробуйте другой SKU или режим.</div>`
+            : candidates.map((c, i) => candidateCard(c, i)).join("")}
+        </div>`;
+    }
+
+    function errHtml(msg) {
+      return `<div class="empty-state">
+        <svg width="40" height="40" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" fill="none">
+          <circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/>
+        </svg>
+        ${esc(msg)}
+      </div>`;
+    }
+
+    // API
+    async function lookup() {
+      const sku   = skuInput.value.trim().toUpperCase();
+      const limit = Math.min(20, Math.max(1, parseInt(limitInput.value) || 3));
+
+      if (!sku) {
+        statusEl.innerHTML = '<span class="err">Введите SKU.</span>';
+        return;
+      }
+
+      lookupBtn.disabled = true;
+      lookupBtn.classList.add("loading");
+      statusEl.textContent = "Выполняется запрос…";
+      resultsEl.innerHTML = `<div class="empty-state">Идёт поиск…</div>`;
+
+      try {
+        let response;
+
+        if (selectedMode === "price") {
+          response = await fetch(`${API}/api/lookup/price?${new URLSearchParams({ sku, limit })}`);
+        } else {
+          response = await fetch(`${API}/api/lookup/tech`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sku, limit, weights: getWeights() })
+          });
+        }
+
+        if (!response.ok) {
+          let detail = null;
+          try { detail = (await response.json()).detail; } catch (_) {}
+
+          if (response.status === 404) {
+            statusEl.innerHTML = '<span class="err">Товар не найден.</span>';
+            resultsEl.innerHTML = errHtml(`SKU «${sku}» не найден в базе данных.`);
+            return;
+          }
+          if (response.status === 422 && detail) {
+            statusEl.innerHTML = '<span class="err">Ошибка запроса.</span>';
+            resultsEl.innerHTML = errHtml(
+              `Ошибка валидации: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`
+            );
+            return;
+          }
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        renderResults(data);
+        statusEl.innerHTML = `<span class="ok">Найдено аналогов: ${data?.candidates?.length ?? 0}.</span>`;
+
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="err">Ошибка соединения с сервером.</span>';
+        resultsEl.innerHTML = errHtml("Не удалось получить данные. Убедитесь, что сервер запущен.");
+      } finally {
+        lookupBtn.disabled = false;
+        lookupBtn.classList.remove("loading");
+      }
+    }
+
+    function sendFeedback() {
+      const t = prompt("Ваш отзыв или замечание:");
+      if (t?.trim()) alert("Спасибо! Мы учтём ваш отзыв.");
+    }
+
+    lookupBtn.addEventListener("click", lookup);
+    skuInput.addEventListener("keydown", e => { if (e.key === "Enter") lookup(); });
+  </script>
+</body>
+</html>
