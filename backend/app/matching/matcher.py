@@ -11,10 +11,15 @@ top-N ближайших кандидатов.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from typing import Optional
 
 from app.normalization.spec_aliases import canonicalize_spec_name, weight_for
+
+_PAREN_RE = re.compile(r'\([^)]*\)')
+_TOKEN_RE = re.compile(r'[а-яёa-z0-9]+', re.IGNORECASE)
 
 
 @dataclass
@@ -93,6 +98,34 @@ def _effective_weight(spec: object, canonical: str) -> float:
     return value
 
 
+def _text_similarity(a: str, b: str) -> float:
+    """Нечёткое сходство двух текстовых значений характеристики.
+
+    1. Точное совпадение → 1.0.
+    2. Убираем пояснения в скобках («если не используется poe» и т.п.),
+       проверяем снова → 0.97.
+    3. Считаем Жаккар по стемам токенов (первые 5 символов каждого слова
+       длиной ≥ 2) — ловит «врезная/врезной», «накладная/накладной».
+    4. Считаем символьный fuzzy-ratio через SequenceMatcher.
+    5. Возвращаем максимум из шагов 3 и 4.
+    """
+    if a == b:
+        return 1.0
+
+    a_n = _PAREN_RE.sub("", a).strip()
+    b_n = _PAREN_RE.sub("", b).strip()
+    if a_n == b_n:
+        return 0.97
+
+    def stems(text: str) -> set[str]:
+        return {w[:5] for w in _TOKEN_RE.findall(text) if len(w) >= 2}
+
+    sa, sb = stems(a_n), stems(b_n)
+    jaccard = len(sa & sb) / len(sa | sb) if (sa or sb) else 0.0
+    fuzzy = SequenceMatcher(None, a_n, b_n).ratio()
+    return round(max(jaccard, fuzzy), 3)
+
+
 def _similarity(
     t_num: Optional[float],
     t_text: Optional[str],
@@ -102,7 +135,7 @@ def _similarity(
     """Вернуть сходство пары значений и пометку-нотку.
 
     Оба числа — нормализованное линейное сходство в [0, 1]. Оба текста —
-    1.0 при точном совпадении, иначе 0.0. Если тип значений не совпал
+    нечёткое сравнение через `_text_similarity`. Если тип значений не совпал
     (число vs текст), возвращаем 0.0 с `note="type_mismatch"`.
     """
     if t_num is not None and c_num is not None:
@@ -110,7 +143,7 @@ def _similarity(
         sim = max(0.0, 1.0 - abs(t_num - c_num) / denom)
         return sim, None
     if t_text is not None and c_text is not None:
-        return (1.0 if t_text == c_text else 0.0), None
+        return _text_similarity(t_text, c_text), None
     if (t_num is not None) != (c_num is not None):
         return 0.0, "type_mismatch"
     return 0.0, None
