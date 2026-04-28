@@ -13,9 +13,12 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import func, select
 
-from app.normalization.spec_aliases import SPEC_ALIASES, WEIGHT_DEFAULTS
+from app.db.models import Product
+from app.db.session import async_session
 from app.services.lookup import DEFAULT_LIMIT, lookup_price, lookup_tech
+from app.normalization.spec_aliases import SPEC_ALIASES, WEIGHT_DEFAULTS
 
 
 router = APIRouter()
@@ -64,6 +67,7 @@ class TechLookupRequest(BaseModel):
 
     sku: str = Field(..., min_length=1)
     limit: int = Field(DEFAULT_LIMIT, ge=1, le=20)
+    brand: Optional[str] = None
     weights: dict[str, float] = Field(default_factory=dict)
 
     @field_validator("weights")
@@ -85,12 +89,31 @@ class TechLookupRequest(BaseModel):
         return value
 
 
+@router.get("/brands")
+async def brands_endpoint() -> dict:
+    async with async_session() as session:
+        result = await session.execute(
+            select(Product.brand).distinct().order_by(Product.brand)
+        )
+        brands = [b for b in result.scalars() if b]
+    return {"brands": brands}
+
+
+@router.get("/status")
+async def status_endpoint() -> dict:
+    async with async_session() as session:
+        result = await session.execute(select(func.max(Product.updated_at)))
+        last_updated = result.scalar()
+    return {"last_updated": last_updated}
+
+
 @router.get("/lookup/price", response_model=LookupResponse)
 async def lookup_price_endpoint(
     sku: str,
     limit: int = Query(DEFAULT_LIMIT, ge=1, le=20),
+    brand: Optional[str] = Query(None),
 ) -> dict[str, Any]:
-    result = await lookup_price(sku, limit=limit)
+    result = await lookup_price(sku, limit=limit, brand=brand or None)
     if not result:
         raise HTTPException(status_code=404, detail="Product not found")
     return result
@@ -104,6 +127,7 @@ async def lookup_tech_endpoint(
         payload.sku,
         limit=payload.limit,
         weight_overrides=payload.weights or None,
+        brand=payload.brand or None,
     )
     if not result:
         raise HTTPException(status_code=404, detail="Product not found")

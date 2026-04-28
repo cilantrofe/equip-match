@@ -11,13 +11,22 @@ from sqlalchemy.orm import selectinload
 from app.db.models import Product, ProductSpec, Source
 
 
-async def get_product_by_sku(session: AsyncSession, sku: str) -> Optional[Product]:
-    """Найти товар по `source_sku` с предзагрузкой характеристик."""
+async def get_product_by_sku(
+    session: AsyncSession,
+    sku: str,
+    brand: Optional[str] = None,
+) -> Optional[Product]:
+    """Найти товар по `source_sku` с предзагрузкой характеристик.
+
+    Если передан `brand` — дополнительно фильтрует по нему.
+    """
     q = (
         select(Product)
         .options(selectinload(Product.specs))
         .where(Product.source_sku == sku)
     )
+    if brand:
+        q = q.where(Product.brand == brand)
     res = await session.execute(q)
     return res.scalars().first()
 
