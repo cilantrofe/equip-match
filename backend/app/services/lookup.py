@@ -28,6 +28,7 @@ async def lookup_tech(
     sku: str,
     limit: int = DEFAULT_LIMIT,
     weight_overrides: Optional[WeightOverrides] = None,
+    brand: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     """Вернуть target и top-N похожих по характеристикам.
 
@@ -36,7 +37,7 @@ async def lookup_tech(
     конкретной заявки, не трогая глобальные настройки.
     """
     async with async_session() as session:
-        target = await get_product_by_sku(session, sku)
+        target = await get_product_by_sku(session, sku, brand=brand)
         if not target:
             return None
         candidates = await get_products_in_category(
@@ -59,10 +60,11 @@ async def lookup_tech(
 async def lookup_price(
     sku: str,
     limit: int = DEFAULT_LIMIT,
+    brand: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     """Вернуть target и top-N ближайших по цене."""
     async with async_session() as session:
-        target = await get_product_by_sku(session, sku)
+        target = await get_product_by_sku(session, sku, brand=brand)
         if not target:
             return None
         candidates = await get_products_in_category(
