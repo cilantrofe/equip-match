@@ -391,10 +391,11 @@ class AkuvoxRusScraper(BaseHttpScraper):
             return None
 
         price = _extract_price(soup)
+        model = _strip_title_prefix(title)
         product_data = {
-            "source_sku": _extract_sku(soup, url) or title or url,
+            "source_sku": model,
             "brand": self.source_brand,
-            "model": _strip_title_prefix(title),
+            "model": model,
             "category": _derive_category(url),
             "price": price,
             "currency": self.default_currency if price else None,
