@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+import logging
+import os
+from datetime import datetime
 from typing import Optional, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import Product, ProductSpec, Source
+
+_log = logging.getLogger(__name__)
+
+_MAX_CANDIDATES = int(os.getenv("MAX_CANDIDATES", "500"))
 
 
 async def get_product_by_sku(
@@ -36,42 +44,60 @@ async def get_products_in_category(
     category: str,
     exclude_product_id: Optional[int] = None,
 ) -> Sequence[Product]:
-    """Вернуть все товары категории с подгруженными характеристиками.
+    """Вернуть товары категории с подгруженными характеристиками.
 
     `exclude_product_id` отсекает сам target прямо в SQL — иначе он
     оказался бы в кандидатах со скором 1.0 и портил выдачу.
+    Результат ограничен `MAX_CANDIDATES` (env, default 500).
     """
     q = (
         select(Product)
         .options(selectinload(Product.specs))
         .where(Product.category == category)
+        .limit(_MAX_CANDIDATES + 1)
     )
     if exclude_product_id is not None:
         q = q.where(Product.id != exclude_product_id)
     res = await session.execute(q)
-    return res.scalars().all()
+    products = list(res.scalars().all())
+    if len(products) > _MAX_CANDIDATES:
+        _log.warning(
+            "Category %r exceeds candidate cap (%d). Set MAX_CANDIDATES env to raise it.",
+            category,
+            _MAX_CANDIDATES,
+        )
+        products = products[:_MAX_CANDIDATES]
+    return products
 
 
 async def upsert_product(session: AsyncSession, product_data: dict) -> Product:
-    """Создать товар или обновить существующий по `(source_id, source_sku)`."""
-    q = select(Product).where(
-        Product.source_id == product_data["source_id"],
-        Product.source_sku == product_data["source_sku"],
+    """Атомарно создать или обновить товар по `(source_id, source_sku)`.
+
+    Использует PostgreSQL INSERT … ON CONFLICT DO UPDATE, что исключает
+    дубли при параллельных запусках скраперов.
+    """
+    set_cols = {
+        k: product_data[k]
+        for k in product_data
+        if k not in ("id", "source_id", "source_sku", "created_at")
+    }
+    stmt = (
+        pg_insert(Product)
+        .values(**product_data)
+        .on_conflict_do_update(
+            constraint="uq_products_source_sku",
+            set_={**set_cols, "updated_at": func.now()},
+        )
     )
-    r = await session.execute(q)
-    p = r.scalars().first()
-    if p:
-        for k, v in product_data.items():
-            if hasattr(p, k):
-                setattr(p, k, v)
-        await session.commit()
-        return p
-    else:
-        p = Product(**product_data)
-        session.add(p)
-        await session.commit()
-        await session.refresh(p)
-        return p
+    await session.execute(stmt)
+    await session.commit()
+    r = await session.execute(
+        select(Product).where(
+            Product.source_id == product_data["source_id"],
+            Product.source_sku == product_data["source_sku"],
+        )
+    )
+    return r.scalars().one()
 
 
 async def add_spec(
@@ -97,6 +123,20 @@ async def add_spec(
     session.add(s)
     await session.commit()
     return s
+
+
+async def get_brands(session: AsyncSession) -> list[str]:
+    """Вернуть отсортированный список непустых брендов из таблицы товаров."""
+    r = await session.execute(
+        select(Product.brand).distinct().order_by(Product.brand)
+    )
+    return [b for b in r.scalars() if b]
+
+
+async def get_last_updated(session: AsyncSession) -> Optional[datetime]:
+    """Вернуть время последнего обновления любого товара."""
+    r = await session.execute(select(func.max(Product.updated_at)))
+    return r.scalar()
 
 
 async def create_source_if_missing(
