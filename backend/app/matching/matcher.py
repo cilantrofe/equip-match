@@ -61,10 +61,9 @@ def _collect_specs(
     Для строк без `spec_name_canonical` каноническое имя вычисляется
     на лету через `canonicalize_spec_name`. Если у товара несколько
     записей одной характеристики (дубли в старых данных), берётся
-    запись с наибольшим весом. `overrides` — словарь весов из запроса,
-    имеет приоритет над БД-значением и дефолтом.
+    запись с наибольшим весом из БД — оверрайды на выбор дубля не влияют,
+    они применяются отдельным проходом после того, как значение выбрано.
     """
-    overrides = overrides or {}
     out: dict[str, SpecTuple] = {}
     for s in getattr(product, "specs", []) or []:
         canonical = s.spec_name_canonical or canonicalize_spec_name(s.spec_name)
@@ -72,30 +71,28 @@ def _collect_specs(
             continue
         num = float(s.spec_value_num) if s.spec_value_num is not None else None
         text = (s.spec_value_text or "").strip().lower() or None
-        if canonical in overrides:
-            weight = overrides[canonical]
-        else:
-            weight = _effective_weight(s, canonical)
+        db_weight = _effective_weight(s, canonical)
         prev = out.get(canonical)
-        if prev is None or weight > prev[2]:
-            out[canonical] = (num, text, weight)
+        if prev is None or db_weight > prev[2]:
+            out[canonical] = (num, text, db_weight)
+    if overrides:
+        out = {
+            name: (num, text, overrides[name] if name in overrides else w)
+            for name, (num, text, w) in out.items()
+        }
     return out
 
 
 def _effective_weight(spec: object, canonical: str) -> float:
     """Определить вес характеристики: БД-значение побеждает дефолтное.
 
-    БД-значение `1.0` трактуется как «не задано оператором» и подменяется
-    каноническим дефолтом из `WEIGHT_DEFAULTS` — иначе свежая миграция
-    (где все веса равны 1.0) схлопнула бы приоритеты важных характеристик.
+    NULL в колонке `weight` означает «не задано»; в этом случае
+    возвращается канонический дефолт из `WEIGHT_DEFAULTS`.
     """
     raw = getattr(spec, "weight", None)
     if raw is None:
         return weight_for(canonical)
-    value = float(raw)
-    if value == 1.0:
-        return weight_for(canonical)
-    return value
+    return float(raw)
 
 
 def _text_similarity(a: str, b: str) -> float:

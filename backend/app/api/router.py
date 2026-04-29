@@ -13,9 +13,8 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import func, select
 
-from app.db.models import Product
+from app.db.crud import get_brands, get_last_updated
 from app.db.session import async_session
 from app.services.lookup import DEFAULT_LIMIT, lookup_price, lookup_tech
 from app.normalization.spec_aliases import SPEC_ALIASES, WEIGHT_DEFAULTS
@@ -92,18 +91,14 @@ class TechLookupRequest(BaseModel):
 @router.get("/brands")
 async def brands_endpoint() -> dict:
     async with async_session() as session:
-        result = await session.execute(
-            select(Product.brand).distinct().order_by(Product.brand)
-        )
-        brands = [b for b in result.scalars() if b]
+        brands = await get_brands(session)
     return {"brands": brands}
 
 
 @router.get("/status")
 async def status_endpoint() -> dict:
     async with async_session() as session:
-        result = await session.execute(select(func.max(Product.updated_at)))
-        last_updated = result.scalar()
+        last_updated = await get_last_updated(session)
     return {"last_updated": last_updated}
 
 

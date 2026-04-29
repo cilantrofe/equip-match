@@ -54,14 +54,22 @@ def start_scheduler() -> None:
         log.info("Scrape scheduler disabled (SCRAPE_ENABLED=false)")
         return
 
+    try:
+        trigger = CronTrigger.from_crontab(_CRON)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"Invalid SCRAPE_CRON value {_CRON!r}: {exc}. "
+            "Use standard 5-field cron syntax, e.g. '0 2 * * *'."
+        ) from exc
+
     _scheduler = AsyncIOScheduler()
     _scheduler.add_job(
         _run_all_scrapers,
-        trigger=CronTrigger.from_crontab(_CRON),
+        trigger=trigger,
         id="scrape_all",
         replace_existing=True,
-        max_instances=1,        # не запускать повторно, если предыдущий ещё идёт
-        misfire_grace_time=3600,  # если пропустили — запустить в течение часа
+        max_instances=1,
+        misfire_grace_time=3600,
     )
     _scheduler.start()
     log.info("Scrape scheduler started — cron: %r", _CRON)

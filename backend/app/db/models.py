@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Column, ForeignKey, Integer, Numeric, Text, TIMESTAMP
+from sqlalchemy import Column, ForeignKey, Integer, Numeric, Text, TIMESTAMP, UniqueConstraint
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.sql import func
 
@@ -24,6 +24,7 @@ class Product(Base):
     """Товар из конкретного источника."""
 
     __tablename__ = "products"
+    __table_args__ = (UniqueConstraint("source_id", "source_sku", name="uq_products_source_sku"),)
 
     id = Column(Integer, primary_key=True)
     source_id = Column(Integer, ForeignKey("sources.id"))
@@ -52,6 +53,6 @@ class ProductSpec(Base):
     spec_value_text = Column(Text)
     spec_value_num = Column(Numeric)
     spec_unit = Column(Text)
-    weight = Column(Numeric, nullable=False, server_default="1.0")
+    weight = Column(Numeric, nullable=True)
 
     product = relationship("Product", back_populates="specs")
