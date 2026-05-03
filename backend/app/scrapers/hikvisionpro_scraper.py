@@ -88,6 +88,7 @@ class HikvisionProScraper(BaseHttpScraper):
     default_headers = DEFAULT_HEADERS
 
     def __init__(self, *args, **kwargs) -> None:
+        """Инициализировать скрапер и словарь соответствий URL → категория."""
         super().__init__(*args, **kwargs)
         self._url_category: dict[str, str] = {}
 

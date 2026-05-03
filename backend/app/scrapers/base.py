@@ -156,7 +156,9 @@ class BaseScraper(ABC):
         asyncio.run(cls().run(**kwargs))
 
     @abstractmethod
-    async def run(self) -> None: ...
+    async def run(self) -> None:
+        """Запустить полный цикл скрапинга."""
+        ...
 
 
 class BaseHttpScraper(BaseScraper, ABC):

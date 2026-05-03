@@ -18,14 +18,17 @@ from app.scheduler import start_scheduler, stop_scheduler
 
 
 class _RateLimitMiddleware(BaseHTTPMiddleware):
+    """Middleware для ограничения частоты запросов по IP-адресу клиента."""
 
     def __init__(self, app: FastAPI, calls: int, period: int) -> None:
+        """Инициализировать с лимитом `calls` запросов за `period` секунд."""
         super().__init__(app)
         self._calls = calls
         self._period = period
         self._buckets: dict[str, deque[float]] = {}
 
     async def dispatch(self, request: Request, call_next):
+        """Пропустить запрос или вернуть 429, если лимит для IP исчерпан."""
         client = request.client.host if request.client else "unknown"
         now = time.monotonic()
         bucket = self._buckets.setdefault(client, deque())
@@ -44,6 +47,7 @@ class _RateLimitMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Жизненный цикл приложения: запустить планировщик при старте, остановить при завершении."""
     start_scheduler()
     yield
     stop_scheduler()
@@ -65,4 +69,5 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/", include_in_schema=False)
 async def root():
+    """Отдать главную страницу SPA."""
     return FileResponse("static/index.html")

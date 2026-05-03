@@ -102,6 +102,7 @@ def _match_view(result: MatchResult) -> dict[str, Any]:
 
 
 def _feature_view(feature: FeatureContribution) -> dict[str, Any]:
+    """Сериализовать `FeatureContribution` в словарь для ответа API."""
     return {
         "name": feature.name,
         "target": feature.target,

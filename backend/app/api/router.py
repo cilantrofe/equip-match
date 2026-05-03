@@ -32,6 +32,8 @@ KNOWN_CANONICALS: frozenset[str] = frozenset(SPEC_ALIASES.values()) | frozenset(
 
 
 class ProductView(BaseModel):
+    """Краткая карточка товара в ответе API."""
+
     id: Optional[int] = None
     sku: Optional[str] = None
     category: Optional[str] = None
@@ -42,6 +44,8 @@ class ProductView(BaseModel):
 
 
 class FeatureView(BaseModel):
+    """Вклад одной характеристики в скор кандидата."""
+
     name: str
     target: Optional[str] = None
     candidate: Optional[str] = None
@@ -52,11 +56,15 @@ class FeatureView(BaseModel):
 
 
 class CandidateView(ProductView):
+    """Кандидат с итоговым скором и разбивкой по характеристикам."""
+
     score: float
     breakdown: list[FeatureView] = []
 
 
 class LookupResponse(BaseModel):
+    """Ответ эндпойнтов `/lookup/*`: целевой товар и список кандидатов."""
+
     query: ProductView
     candidates: list[CandidateView]
 
@@ -90,6 +98,7 @@ class TechLookupRequest(BaseModel):
 
 @router.get("/brands")
 async def brands_endpoint() -> dict:
+    """Вернуть отсортированный список всех брендов из базы данных."""
     async with async_session() as session:
         brands = await get_brands(session)
     return {"brands": brands}
@@ -97,6 +106,7 @@ async def brands_endpoint() -> dict:
 
 @router.get("/status")
 async def status_endpoint() -> dict:
+    """Вернуть время последнего обновления товаров (`null`, если данных ещё нет)."""
     async with async_session() as session:
         last_updated = await get_last_updated(session)
     return {"last_updated": last_updated}
@@ -108,6 +118,7 @@ async def lookup_price_endpoint(
     limit: int = Query(DEFAULT_LIMIT, ge=1, le=20),
     brand: Optional[str] = Query(None),
 ) -> dict[str, Any]:
+    """Найти top-N товаров, ближайших по цене к товару с указанным `sku`."""
     result = await lookup_price(sku, limit=limit, brand=brand or None)
     if not result:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -118,6 +129,7 @@ async def lookup_price_endpoint(
 async def lookup_tech_endpoint(
     payload: TechLookupRequest,
 ) -> dict[str, Any]:
+    """Найти top-N товаров, похожих по характеристикам на товар с указанным `sku`."""
     result = await lookup_tech(
         payload.sku,
         limit=payload.limit,

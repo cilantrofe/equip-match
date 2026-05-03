@@ -190,6 +190,7 @@ def _format_num(n: float) -> str:
 
 
 def _try_boolean(text: str) -> Optional[NormalizedValue]:
+    """Распознать булево значение. Возвращает `None`, если строка не является булевой."""
     key = text.strip().lower().rstrip(".,;")
     if key in _BOOL_TRUE:
         return NormalizedValue(value_num=1.0, value_text="да", kind="boolean")
@@ -199,10 +200,12 @@ def _try_boolean(text: str) -> Optional[NormalizedValue]:
 
 
 def _has_standard(text: str) -> bool:
+    """Проверить, совпадает ли текст с одним из стандартных паттернов (IP, H.265, PoE и т.п.)."""
     return any(p.search(text) for p in _STANDARD_PATTERNS)
 
 
 def _try_fraction(text: str) -> Optional[NormalizedValue]:
+    """Распознать дробь вида `1/2` или `1/4"`. Возвращает `None` при неудаче."""
     m = _FRACTION_RE.match(text)
     if not m:
         return None
@@ -222,6 +225,7 @@ _UP_TO_RE = re.compile(r"^(?:до|не\s+более|up\s+to)\s+", re.IGNORECASE)
 
 
 def _try_dimension(text: str) -> Optional[NormalizedValue]:
+    """Распознать размерность вида `100×200 мм` или `12×34×56`. Возвращает `None` при неудаче."""
     if not _DIMENSION_SEP_RE.search(text):
         return None
     parts = _DIMENSION_SEP_RE.split(text)
@@ -239,6 +243,7 @@ def _try_dimension(text: str) -> Optional[NormalizedValue]:
 
 
 def _try_range(text: str) -> Optional[NormalizedValue]:
+    """Распознать диапазон вида `0..100 %` или `5 to 35`. Возвращает `None` при неудаче."""
     m = _RANGE_RE.match(text)
     if not m:
         return None
@@ -251,6 +256,7 @@ def _try_range(text: str) -> Optional[NormalizedValue]:
 
 
 def _try_plain_number(text: str) -> Optional[NormalizedValue]:
+    """Распознать число с опциональной единицей вида `12.5 V`. Возвращает `None` при неудаче."""
     collapsed = _THOUSAND_SEP_RE.sub("", text)
     m = _PLAIN_NUM_RE.match(collapsed)
     if not m:

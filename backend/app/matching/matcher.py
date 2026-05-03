@@ -147,6 +147,7 @@ def _similarity(
 
 
 def _display(num: Optional[float], text: Optional[str]) -> Optional[str]:
+    """Вернуть строковое представление значения: число предпочтительнее текста."""
     if num is not None:
         return str(num)
     return text
@@ -206,6 +207,7 @@ def _score_pair(
 
 
 def _same_brand(target: object, candidate: object) -> bool:
+    """Вернуть `True`, если оба товара принадлежат одному бренду (без учёта регистра)."""
     t = (getattr(target, "brand", None) or "").strip().lower()
     c = (getattr(candidate, "brand", None) or "").strip().lower()
     return bool(t) and t == c
