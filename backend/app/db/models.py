@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from sqlalchemy import Column, ForeignKey, Integer, Numeric, Text, TIMESTAMP, UniqueConstraint
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.sql import func
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    """Базовый класс для всех ORM-моделей."""
 
 
 class Source(Base):

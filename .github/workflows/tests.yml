@@ -33,7 +33,7 @@ jobs:
 
       - name: Type check (mypy)
         working-directory: backend
-        run: mypy app/ --ignore-missing-imports
+        run: mypy app/
 
       - name: Security scan (bandit)
         working-directory: backend

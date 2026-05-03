@@ -40,7 +40,7 @@ async def _run_all_scrapers() -> None:
     for cls in scrapers:
         try:
             log.info("Running scraper: %s", cls.source_name)
-            await cls().run()
+            await cls().run()  # type: ignore[abstract]
             log.info("Scraper finished: %s", cls.source_name)
         except Exception:
             log.exception("Scraper failed: %s", cls.source_name)

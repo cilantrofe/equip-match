@@ -90,7 +90,7 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
 )
-app.add_middleware(_RateLimitMiddleware, calls=RATE_LIMIT_CALLS, period=RATE_LIMIT_PERIOD)
+app.add_middleware(_RateLimitMiddleware, calls=RATE_LIMIT_CALLS, period=RATE_LIMIT_PERIOD)  # type: ignore[arg-type]
 
 app.include_router(api_router, prefix="/api")
 

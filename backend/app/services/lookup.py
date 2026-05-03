@@ -42,12 +42,12 @@ async def lookup_tech(
             return None
         candidates = await get_products_in_category(
             session,
-            target.category or "",
-            exclude_product_id=target.id,
+            str(target.category or ""),
+            exclude_product_id=int(target.id),  # type: ignore[arg-type]
         )
         results = match_by_tech(
             target,
-            candidates,
+            list(candidates),
             limit=limit,
             weight_overrides=weight_overrides,
         )
@@ -69,10 +69,10 @@ async def lookup_price(
             return None
         candidates = await get_products_in_category(
             session,
-            target.category or "",
-            exclude_product_id=target.id,
+            str(target.category or ""),
+            exclude_product_id=int(target.id),  # type: ignore[arg-type]
         )
-        results = match_by_price(target, candidates, limit=limit)
+        results = match_by_price(target, list(candidates), limit=limit)
         return {
             "query": _product_view(target),
             "candidates": [_match_view(r) for r in results],
