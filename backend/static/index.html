@@ -545,9 +545,28 @@
       .weights-grid { grid-template-columns: 1fr; }
       .r-meta { grid-template-columns: repeat(2, 1fr); }
     }
+    #serverBanner {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      background: #ef4444;
+      color: #fff;
+      text-align: center;
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: 500;
+      z-index: 1000;
+      letter-spacing: 0.01em;
+    }
+    #serverBanner.visible { display: block; }
+    body.server-offline .btn { opacity: 0.5; cursor: not-allowed; }
   </style>
 </head>
 <body>
+
+  <div id="serverBanner">
+    ⚠ Сервер недоступен — попытка переподключения каждые 30 секунд…
+  </div>
 
   <div class="card">
 
@@ -963,6 +982,32 @@
 
     lookupBtn.addEventListener("click", lookup);
     skuInput.addEventListener("keydown", e => { if (e.key === "Enter") lookup(); });
+
+    const serverBanner = document.getElementById("serverBanner");
+
+    async function checkServerHealth() {
+      try {
+        const r = await fetch(`${API}/api/health`, { signal: AbortSignal.timeout(3000) });
+        if (r.ok) {
+          serverBanner.classList.remove("visible");
+          document.body.classList.remove("server-offline");
+          lookupBtn.disabled = false;
+        } else {
+          setServerOffline();
+        }
+      } catch {
+        setServerOffline();
+      }
+    }
+
+    function setServerOffline() {
+      serverBanner.classList.add("visible");
+      document.body.classList.add("server-offline");
+      lookupBtn.disabled = true;
+    }
+
+    checkServerHealth();
+    setInterval(checkServerHealth, 30_000);
 
     fetch(`${API}/api/status`)
       .then(r => r.ok ? r.json() : null)
