@@ -218,13 +218,6 @@
       box-shadow: 0 0 0 3px rgba(34,197,94,0.13);
     }
 
-    input[type="number"] {
-      max-width: 82px;
-      text-align: center;
-      padding-left: 8px;
-      padding-right: 8px;
-    }
-
     select {
       border: 1.5px solid var(--border);
       background: white;
@@ -631,7 +624,6 @@
           <select id="brandSelect" title="Бренд товара">
             <option value="" disabled selected>Бренд</option>
           </select>
-          <input id="limitInput" type="number" min="1" max="20" value="3" title="Количество аналогов (1–20)" />
         </div>
       </div>
 
@@ -742,7 +734,6 @@
     const resultsEl  = document.getElementById("resultsArea");
     const lookupBtn  = document.getElementById("lookupBtn");
     const skuInput   = document.getElementById("skuInput");
-    const limitInput = document.getElementById("limitInput");
     const brandSelect = document.getElementById("brandSelect");
 
     fetch(`${API}/api/brands`)
@@ -898,7 +889,7 @@
     // API
     async function lookup() {
       const sku   = skuInput.value.trim().toUpperCase();
-      const limit = Math.min(20, Math.max(1, parseInt(limitInput.value) || 3));
+      const limit = 3;
       const brand = brandSelect.value || null;
 
       if (!sku) {
