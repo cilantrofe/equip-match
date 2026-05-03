@@ -296,7 +296,7 @@ def _extract_kv_lines(soup: BeautifulSoup) -> list[tuple[str, str]]:
     main = soup.select_one("main") or soup.body
     if not main:
         return pairs
-    for line in _clean(main.get_text("\n", strip=True)).split("\n"):
+    for line in main.get_text("\n", strip=True).split("\n"):
         line = _clean(line)
         if len(line) < 3 or ":" not in line:
             continue
