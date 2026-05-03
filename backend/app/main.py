@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import os
 import time
 from collections import deque
 from contextlib import asynccontextmanager
@@ -16,6 +18,13 @@ from app.api.router import router as api_router
 from app.config import ALLOWED_ORIGINS, RATE_LIMIT_CALLS, RATE_LIMIT_PERIOD
 from app.scheduler import start_scheduler, stop_scheduler
 
+logging.basicConfig(
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
+)
+
+_log = logging.getLogger(__name__)
+
 
 class _RateLimitMiddleware(BaseHTTPMiddleware):
     """Middleware для ограничения частоты запросов по IP-адресу клиента."""
@@ -29,12 +38,25 @@ class _RateLimitMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         """Пропустить запрос или вернуть 429, если лимит для IP исчерпан."""
-        client = request.client.host if request.client else "unknown"
+        xff = request.headers.get("x-forwarded-for")
+        client = xff.split(",")[0].strip() if xff else (
+            request.client.host if request.client else "unknown"
+        )
         now = time.monotonic()
-        bucket = self._buckets.setdefault(client, deque())
         cutoff = now - self._period
-        while bucket and bucket[0] < cutoff:
-            bucket.popleft()
+
+        bucket = self._buckets.get(client)
+        if bucket is not None:
+            while bucket and bucket[0] < cutoff:
+                bucket.popleft()
+            if not bucket:
+                del self._buckets[client]
+                bucket = None
+
+        if bucket is None:
+            bucket = deque()
+            self._buckets[client] = bucket
+
         if len(bucket) >= self._calls:
             return JSONResponse(
                 {"detail": "Too many requests"},
@@ -54,6 +76,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Product Matcher", lifespan=lifespan)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    _log.exception("Unhandled error on %s %s — %s", request.method, request.url.path, exc)
+    return JSONResponse({"detail": "Internal server error"}, status_code=500)
+
 
 app.add_middleware(
     CORSMiddleware,

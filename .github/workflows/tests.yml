@@ -27,6 +27,18 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
+      - name: Lint (ruff)
+        working-directory: backend
+        run: ruff check app/
+
+      - name: Type check (mypy)
+        working-directory: backend
+        run: mypy app/ --ignore-missing-imports
+
+      - name: Security scan (bandit)
+        working-directory: backend
+        run: bandit -r app/ -ll
+
       - name: Run tests
         working-directory: backend
         run: pytest tests/ -v --cov=app --cov-report=term-missing

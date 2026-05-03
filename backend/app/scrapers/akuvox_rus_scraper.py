@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 from collections import deque
 from typing import Optional
@@ -109,7 +110,7 @@ def _extract_jsonld_objects(soup: BeautifulSoup) -> list:
             data = json.loads(raw)
             out.extend(data if isinstance(data, list) else [data])
         except Exception:
-            pass
+            logging.getLogger(__name__).debug("JSON-LD parse failed, skipping script tag")
     return out
 
 

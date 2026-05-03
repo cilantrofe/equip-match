@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import text
 
 from app.db.crud import get_brands, get_last_updated
 from app.db.session import async_session
@@ -94,6 +95,14 @@ class TechLookupRequest(BaseModel):
                 + ", ".join(sorted(bad))
             )
         return value
+
+
+@router.get("/health")
+async def health_endpoint() -> dict:
+    """Проверить доступность приложения и базы данных."""
+    async with async_session() as session:
+        await session.execute(text("SELECT 1"))
+    return {"status": "ok"}
 
 
 @router.get("/brands")

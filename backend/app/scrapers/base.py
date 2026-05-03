@@ -277,7 +277,8 @@ class BaseHttpScraper(BaseScraper, ABC):
                 self._log.debug("Saved [%d specs]: %s", len(pairs), url)
                 counters["saved"] += 1
             except IntegrityError:
-                pass
+                self._log.debug("Duplicate product, skipping: %s", url)
+                counters["skipped"] = counters.get("skipped", 0) + 1
             except Exception:
                 self._log.exception("DB error for: %s", url)
                 counters["errors"] += 1

@@ -1,6 +1,7 @@
 import os
 
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://fake:fake@localhost/fake")
+os.environ.setdefault("ALLOWED_ORIGINS", "http://localhost")
 
 from types import SimpleNamespace
 
