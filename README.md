@@ -35,11 +35,9 @@ POSTGRES_DB=equipmatch
 # Хост — db (имя сервиса в docker-compose)
 DATABASE_URL=postgresql+asyncpg://equipmatch:secret@db:5432/equipmatch
 
-# Планировщик скраперов
+# Опционально: Планировщик скраперов
 # SCRAPE_ENABLED=true          — включить/выключить (true по умолчанию)
 # SCRAPE_CRON=0 2 * * *        — расписание в cron-формате (по умолчанию: 1-го числа каждого месяца в 02:00)
-SCRAPE_ENABLED=true
-SCRAPE_CRON=0 2 1 * *
 
 # Разрешённые CORS-источники (через запятую)
 ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
@@ -80,7 +78,7 @@ curl http://localhost:8000/api/health
 # {"status":"ok"}
 ```
 
-Документация API (Swagger UI): [http://localhost:8000/docs](http://localhost:8000/docs)
+Документация API (Swagger UI) после запуска будет доступна по адресу: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ---
 
@@ -169,7 +167,6 @@ pytest --cov=app tests/        # с покрытием
 | GET    | `/api/lookup/price`   | Top-N товаров, ближайших по цене              |
 | POST   | `/api/lookup/tech`    | Top-N товаров, похожих по характеристикам     |
 
-Полная документация — [http://localhost:8000/docs](http://localhost:8000/docs) после запуска сервера.
 
 ### Пример: поиск по цене
 
