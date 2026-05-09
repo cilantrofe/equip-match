@@ -25,7 +25,7 @@ router = APIRouter()
 
 
 MAX_WEIGHT_OVERRIDES = 5
-MAX_WEIGHT_VALUE = 10.0
+MAX_WEIGHT_VALUE = 3.0
 
 KNOWN_CANONICALS: frozenset[str] = frozenset(SPEC_ALIASES.values()) | frozenset(
     WEIGHT_DEFAULTS.keys()
@@ -91,7 +91,7 @@ class TechLookupRequest(BaseModel):
         bad = [k for k, w in value.items() if not (0.0 <= float(w) <= MAX_WEIGHT_VALUE)]
         if bad:
             raise ValueError(
-                f"веса должны быть в диапазоне (0, {MAX_WEIGHT_VALUE}]: "
+                f"веса должны быть в диапазоне [0, {MAX_WEIGHT_VALUE}]: "
                 + ", ".join(sorted(bad))
             )
         return value

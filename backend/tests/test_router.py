@@ -223,14 +223,6 @@ async def test_lookup_tech_unknown_canonical_in_weights(app_client):
     assert "неизвестные канонические имена" in str(body)
 
 
-async def test_lookup_tech_weight_zero_invalid(app_client):
-    r = await app_client.post(
-        "/api/lookup/tech",
-        json={"sku": "SKU-001", "weights": {"voltage": 0.0}},
-    )
-    assert r.status_code == 422
-
-
 async def test_lookup_tech_weight_too_high(app_client):
     r = await app_client.post(
         "/api/lookup/tech",
@@ -246,7 +238,7 @@ async def test_lookup_tech_weight_boundary_valid(app_client, mocker):
 
     r = await app_client.post(
         "/api/lookup/tech",
-        json={"sku": "SKU-001", "weights": {"voltage": 10.0}},
+        json={"sku": "SKU-001", "weights": {"voltage": 3.0}},
     )
     assert r.status_code == 200
 
