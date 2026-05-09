@@ -24,7 +24,7 @@ from app.normalization.spec_aliases import SPEC_ALIASES, WEIGHT_DEFAULTS
 router = APIRouter()
 
 
-MAX_WEIGHT_OVERRIDES = 6
+MAX_WEIGHT_OVERRIDES = 5
 MAX_WEIGHT_VALUE = 10.0
 
 KNOWN_CANONICALS: frozenset[str] = frozenset(SPEC_ALIASES.values()) | frozenset(
@@ -88,7 +88,7 @@ class TechLookupRequest(BaseModel):
             raise ValueError(
                 "неизвестные канонические имена: " + ", ".join(sorted(unknown))
             )
-        bad = [k for k, w in value.items() if not (0.0 < float(w) <= MAX_WEIGHT_VALUE)]
+        bad = [k for k, w in value.items() if not (0.0 <= float(w) <= MAX_WEIGHT_VALUE)]
         if bad:
             raise ValueError(
                 f"веса должны быть в диапазоне (0, {MAX_WEIGHT_VALUE}]: "
