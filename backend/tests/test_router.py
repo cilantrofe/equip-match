@@ -277,7 +277,7 @@ async def test_lookup_tech_weights_passed_to_service(app_client, mocker):
 
     await app_client.post(
         "/api/lookup/tech",
-        json={"sku": "SKU-001", "weights": {"voltage": 5.0}},
+        json={"sku": "SKU-001", "weights": {"voltage": 3.0}},
     )
     _, kwargs = service.call_args
-    assert kwargs["weight_overrides"] == {"voltage": 5.0}
+    assert kwargs["weight_overrides"] == {"voltage": 3.0}
