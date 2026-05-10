@@ -29,12 +29,14 @@ async def lookup_tech(
     limit: int = DEFAULT_LIMIT,
     weight_overrides: Optional[WeightOverrides] = None,
     brand: Optional[str] = None,
+    include_brands: Optional[list[str]] = None,
 ) -> Optional[dict[str, Any]]:
     """Вернуть target и top-N похожих по характеристикам.
 
     `weight_overrides` — словарь `{canonical_name: weight}` из запроса,
     перекрывает дефолты и БД-значения. Менеджер прокидывает сюда акценты
     конкретной заявки, не трогая глобальные настройки.
+    `include_brands` — если задан, среди кандидатов только эти бренды.
     """
     async with async_session() as session:
         target = await get_product_by_sku(session, sku, brand=brand)
@@ -44,6 +46,7 @@ async def lookup_tech(
             session,
             str(target.category or ""),
             exclude_product_id=int(target.id),  # type: ignore[arg-type]
+            include_brands=include_brands or None,
         )
         results = match_by_tech(
             target,
@@ -61,6 +64,7 @@ async def lookup_price(
     sku: str,
     limit: int = DEFAULT_LIMIT,
     brand: Optional[str] = None,
+    include_brands: Optional[list[str]] = None,
 ) -> Optional[dict[str, Any]]:
     """Вернуть target и top-N ближайших по цене."""
     async with async_session() as session:
@@ -71,6 +75,7 @@ async def lookup_price(
             session,
             str(target.category or ""),
             exclude_product_id=int(target.id),  # type: ignore[arg-type]
+            include_brands=include_brands or None,
         )
         results = match_by_price(target, list(candidates), limit=limit)
         return {

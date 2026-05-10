@@ -43,11 +43,13 @@ async def get_products_in_category(
     session: AsyncSession,
     category: str,
     exclude_product_id: Optional[int] = None,
+    include_brands: Optional[list[str]] = None,
 ) -> Sequence[Product]:
     """Вернуть товары категории с подгруженными характеристиками.
 
     `exclude_product_id` отсекает сам target прямо в SQL — иначе он
     оказался бы в кандидатах со скором 1.0 и портил выдачу.
+    `include_brands` — если задан, возвращает только товары указанных брендов.
     Результат ограничен `MAX_CANDIDATES` (env, default 500).
     """
     q = (
@@ -58,6 +60,8 @@ async def get_products_in_category(
     )
     if exclude_product_id is not None:
         q = q.where(Product.id != exclude_product_id)
+    if include_brands:
+        q = q.where(Product.brand.in_(include_brands))
     res = await session.execute(q)
     products = list(res.scalars().all())
     if len(products) > _MAX_CANDIDATES:

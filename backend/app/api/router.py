@@ -77,6 +77,7 @@ class TechLookupRequest(BaseModel):
     limit: int = Field(DEFAULT_LIMIT, ge=1, le=20)
     brand: Optional[str] = None
     weights: dict[str, float] = Field(default_factory=dict)
+    include_brands: list[str] = Field(default_factory=list)
 
     @field_validator("weights")
     @classmethod
@@ -126,9 +127,13 @@ async def lookup_price_endpoint(
     sku: str,
     limit: int = Query(DEFAULT_LIMIT, ge=1, le=20),
     brand: Optional[str] = Query(None),
+    include_brands: list[str] = Query(default=[]),
 ) -> dict[str, Any]:
     """Найти top-N товаров, ближайших по цене к товару с указанным `sku`."""
-    result = await lookup_price(sku, limit=limit, brand=brand or None)
+    result = await lookup_price(
+        sku, limit=limit, brand=brand or None,
+        include_brands=include_brands or None,
+    )
     if not result:
         raise HTTPException(status_code=404, detail="Product not found")
     return result
@@ -144,6 +149,7 @@ async def lookup_tech_endpoint(
         limit=payload.limit,
         weight_overrides=payload.weights or None,
         brand=payload.brand or None,
+        include_brands=payload.include_brands or None,
     )
     if not result:
         raise HTTPException(status_code=404, detail="Product not found")
