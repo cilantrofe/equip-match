@@ -16,6 +16,8 @@ import random
 import re
 from abc import ABC, abstractmethod
 from typing import Optional
+from urllib.parse import urlparse
+from urllib.robotparser import RobotFileParser
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -285,6 +287,27 @@ class BaseHttpScraper(BaseScraper, ABC):
 
             await asyncio.sleep(self.request_delay + random.random())
 
+    async def _load_robots(
+        self, session: aiohttp.ClientSession, base_url: str
+    ) -> RobotFileParser:
+        """Загрузить и разобрать robots.txt сайта.
+
+        Если файл недоступен или не существует — возвращает парсер без правил,
+        что означает разрешение на обход всех путей.
+        """
+        parsed = urlparse(base_url)
+        robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
+        rp = RobotFileParser()
+        rp.set_url(robots_url)
+        try:
+            _, html = await self.fetch(session, robots_url)
+            if html:
+                rp.parse(html.splitlines())
+                self._log.debug("Loaded robots.txt from %s", robots_url)
+        except Exception:
+            self._log.debug("robots.txt unavailable at %s — allowing all", robots_url)
+        return rp
+
     async def run(self) -> None:
         """Запустить полный цикл скрапинга: сбор ссылок → обход → сохранение."""
         self._log.info("Starting — %s", self.source_url)
@@ -295,6 +318,13 @@ class BaseHttpScraper(BaseScraper, ABC):
         ) as http:
             links = await self.collect_links(http)
             self._log.info("Found %d product links", len(links))
+
+            rp = await self._load_robots(http, self.source_url)
+            allowed = {url for url in links if rp.can_fetch(CHROME_UA, url)}
+            blocked = len(links) - len(allowed)
+            if blocked:
+                self._log.info("robots.txt blocked %d URLs — proceeding with %d", blocked, len(allowed))
+            links = allowed
 
             if not links:
                 self._log.warning("No links found — nothing to scrape")
