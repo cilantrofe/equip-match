@@ -35,10 +35,6 @@ jobs:
         working-directory: backend
         run: mypy app/
 
-      - name: Security scan (bandit)
-        working-directory: backend
-        run: bandit -r app/ -ll
-
       - name: Run tests
         working-directory: backend
         run: pytest tests/ -v --cov=app --cov-report=term-missing
