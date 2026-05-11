@@ -588,77 +588,6 @@ def _sensitivity_dataset() -> list[dict]:
     return entries
 
 
-def plot_weight_sensitivity(_):
-    spec = "camera_resolution"
-    weight_vals = [0.3, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0]
-    sens_data = _sensitivity_dataset()
-    mean_ranks = []
-
-    for w in weight_vals:
-        ranks = []
-        for entry in sens_data:
-            cands = [entry["relevant"], entry["deceiver"]]
-            res = match_by_tech(
-                entry["target"],
-                cands,
-                limit=len(cands),
-                exclude_same_brand=False,
-                weight_overrides={spec: w},
-            )
-            r = rank_of(res, entry["relevant"].id)
-            ranks.append(r if r is not None else 3)
-        mean_ranks.append(float(np.mean(ranks)))
-
-    default_w = WEIGHT_DEFAULTS.get(spec, 1.0)
-    di = min(range(len(weight_vals)), key=lambda i: abs(weight_vals[i] - default_w))
-
-    fig, ax = plt.subplots(figsize=(9, 5))
-    ax.plot(
-        weight_vals,
-        mean_ranks,
-        "-o",
-        color="#e07b7b",
-        linewidth=2.5,
-        markersize=8,
-        markerfacecolor="white",
-        markeredgewidth=2.2,
-    )
-    ax.axvline(
-        weight_vals[di],
-        color="#555",
-        linestyle="--",
-        linewidth=1.5,
-        label=f"Используемый вес = {weight_vals[di]}",
-    )
-    ax.scatter([weight_vals[di]], [mean_ranks[di]], s=120, zorder=5, color="#e07b7b")
-
-    ax.axvspan(
-        weight_vals[di],
-        weight_vals[-1],
-        alpha=0.07,
-        color="#e07b7b",
-        label="Зона оптимального качества",
-    )
-
-    ax.set_xlabel(f"Вес характеристики «{spec}»", fontsize=12)
-    ax.set_ylabel("Средний ранг релевантного товара\n(меньше = лучше)", fontsize=12)
-    ax.set_title(
-        "Влияние веса ключевой характеристики на качество ранжирования",
-        fontsize=13,
-        fontweight="bold",
-    )
-    ax.set_yticks([1.0, 1.33, 1.67, 2.0])
-    ax.set_yticklabels(
-        ["1.0\n(всегда rank 1)", "1.33", "1.67", "2.0\n(всегда rank 2)"], fontsize=9
-    )
-    ax.invert_yaxis()
-    ax.legend(fontsize=10)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.grid(axis="y", alpha=0.3)
-    _save(fig, "04_weight_sensitivity.png")
-
-
 # График 5: Тепловая карта сходства
 
 
@@ -722,7 +651,6 @@ def main():
     plot_ablation_mrr(exp)
     plot_precision_at_k(exp)
     plot_score_distribution(exp)
-    plot_weight_sensitivity(dataset)
     plot_similarity_heatmap(dataset)
 
     print(f"\nDone. Plots: {(PLOTS_DIR).resolve()}")
