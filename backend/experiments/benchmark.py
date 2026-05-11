@@ -483,54 +483,6 @@ def plot_score_distribution(exp: dict):
     _save(fig, "03_score_distribution.png")
 
 
-# График 5: Тепловая карта сходства
-
-
-def plot_similarity_heatmap(dataset: list[dict]):
-    products, labels = [], []
-    for i, entry in enumerate(dataset, 1):
-        t, r = entry["target"], entry["relevant"]
-        products += [t, r]
-        labels += [f"T{i}\n{t.brand}", f"R{i}\n{r.brand}"]
-
-    n = len(products)
-    matrix = np.zeros((n, n))
-    for i, pi in enumerate(products):
-        for j, pj in enumerate(products):
-            if i == j:
-                matrix[i, j] = 1.0
-                continue
-            ti = _collect_specs(pi)
-            tj = _collect_specs(pj)
-            if ti and tj:
-                score, _, common = _score_pair(ti, tj)
-                matrix[i, j] = score if common > 0 else 0.0
-
-    fig, ax = plt.subplots(figsize=(10, 8))
-    sns.heatmap(
-        matrix,
-        annot=True,
-        fmt=".2f",
-        cmap="YlOrRd",
-        xticklabels=labels,
-        yticklabels=labels,
-        linewidths=0.5,
-        linecolor="white",
-        vmin=0,
-        vmax=1,
-        ax=ax,
-        annot_kws={"size": 8},
-    )
-    ax.set_title(
-        "Матрица попарного технического сходства\n"
-        "(T — target, R — релевантный аналог)",
-        fontsize=13,
-        fontweight="bold",
-    )
-    ax.tick_params(axis="x", rotation=45, labelsize=9)
-    ax.tick_params(axis="y", rotation=0, labelsize=9)
-    _save(fig, "05_similarity_heatmap.png")
-
 
 def main():
     dataset = build_dataset()
@@ -546,7 +498,6 @@ def main():
     plot_ablation_mrr(exp)
     plot_precision_at_k(exp)
     plot_score_distribution(exp)
-    plot_similarity_heatmap(dataset)
 
     print(f"\nDone. Plots: {(PLOTS_DIR).resolve()}")
 
